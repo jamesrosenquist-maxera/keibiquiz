@@ -2,296 +2,1243 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>オフィスビル警備 裁判クイズすごろく</title>
-  <!-- Firebase SDK -->
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-  <!-- QRコード生成 -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>裁判クイズ・5色警備員のオフィスビルすごろく</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@600;700;800;900&display=swap');
+
     :root {
-      --bg: #0f172a;
-      --card-bg: #1e293b;
-      --text: #f8fafc;
-      --accent: #38bdf8;
-      --red: #ef4444;
-      --blue: #3b82f6;
-      --yellow: #eab308;
-      --green: #22c55e;
-      --purple: #a855f7;
+      --dice-size: 76px;
     }
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Helvetica Neue', Arial, sans-serif; }
-    body { background: var(--bg); color: var(--text); min-height: 100vh; }
 
-    /* ================= スマホ（子機） ================= */
-    #client-view {
-      display: none;
-      min-height: 100vh;
-      padding: 16px;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
+    body {
+      font-family: 'M PLUS Rounded 1c', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #090d16;
+      color: #f8fafc;
+      user-select: none;
+      overflow-x: hidden;
+      margin: 0;
+      padding: 0;
     }
-    .card {
-      background: var(--card-bg);
-      border-radius: 16px;
-      padding: 24px;
-      width: 100%;
-      max-width: 420px;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
-    }
-    .ans-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 14px;
-      margin-top: 20px;
-    }
-    .btn-ans {
-      height: 120px;
-      border: none;
-      border-radius: 14px;
-      font-size: 2.2rem;
-      font-weight: 900;
-      color: #fff;
-      cursor: pointer;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      box-shadow: 0 6px 0 rgba(0,0,0,0.3);
-    }
-    .btn-ans:active { transform: translateY(4px); box-shadow: 0 2px 0 rgba(0,0,0,0.3); }
-    .btn-ans.disabled { opacity: 0.35; pointer-events: none; }
-    .btn-1 { background: var(--red); }
-    .btn-2 { background: var(--blue); }
-    .btn-3 { background: var(--yellow); color: #000; }
-    .btn-4 { background: var(--green); }
-    .ans-sub { font-size: 1rem; font-weight: normal; margin-top: 4px; }
 
-    .res-box {
-      margin-top: 20px;
-      padding: 18px;
-      border-radius: 12px;
-      font-size: 1.4rem;
-      font-weight: bold;
-      display: none;
-    }
-    .res-box.ok { background: #15803d; color: #fff; border: 2px solid #4ade80; }
-    .res-box.ng { background: #b91c1c; color: #fff; border: 2px solid #f87171; }
-
-    /* ================= PC・親機 ================= */
-    #host-view {
-      display: none;
-      min-height: 100vh;
-      flex-direction: column;
-    }
-    header {
-      background: var(--card-bg);
-      padding: 12px 24px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      border-bottom: 2px solid #334155;
-    }
-    .host-body {
-      flex: 1;
-      display: grid;
-      grid-template-columns: 320px 1fr;
-      gap: 16px;
-      padding: 16px;
-    }
-    .sidebar {
-      background: var(--card-bg);
-      border-radius: 12px;
-      padding: 16px;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
+    /* 盤面のアスペクト比を16:9で厳密固定し、解像度変化によるズレをゼロにするコンテナ */
     .board-frame {
-      background: #1e293b;
-      border-radius: 12px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
       position: relative;
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      background: #0f172a;
+      border-radius: 16px;
       overflow: hidden;
-      border: 2px solid #334155;
-      min-height: 500px;
+      box-shadow: 0 16px 36px -8px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.1);
     }
-    .board-img {
+
+    /* 3D立体ダイス */
+    .dice-scene {
+      width: var(--dice-size);
+      height: var(--dice-size);
+      perspective: 650px;
+      margin: 4px auto;
+    }
+
+    .cube {
       width: 100%;
       height: 100%;
-      object-fit: contain;
-      position: absolute;
-      top: 0; left: 0;
-    }
-    .fallback-board {
-      text-align: center;
-      padding: 40px;
-      color: #94a3b8;
-    }
-    .fallback-board h3 { color: #f8fafc; margin-bottom: 12px; }
-
-    /* コマ配置用コンテナ */
-    #tokens-container {
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
+      position: relative;
+      transform-style: preserve-3d;
+      transform: translateZ(calc(var(--dice-size) / -2)) rotateX(-22deg) rotateY(-32deg);
+      transition: transform 1.2s cubic-bezier(0.18, 0.89, 0.32, 1.15);
     }
 
-    .modal {
-      position: fixed; inset: 0; background: rgba(0,0,0,0.85);
-      display: flex; align-items: center; justify-content: center; z-index: 100; padding: 20px;
+    .cube.rolling {
+      animation: diceRollWild 1.05s infinite cubic-bezier(0.4, 0, 0.2, 1);
     }
-    .modal-card {
-      background: var(--card-bg); border-radius: 20px; max-width: 750px; width: 100%; padding: 32px;
-      border: 2px solid var(--accent); text-align: center;
+
+    @keyframes diceRollWild {
+      0% { transform: translateZ(calc(var(--dice-size) / -2)) rotateX(0deg) rotateY(0deg) rotateZ(0deg) translateY(0); }
+      25% { transform: translateZ(calc(var(--dice-size) / -2)) rotateX(380deg) rotateY(210deg) rotateZ(190deg) translateY(-24px) scale(1.08); }
+      50% { transform: translateZ(calc(var(--dice-size) / -2)) rotateX(760deg) rotateY(540deg) rotateZ(380deg) translateY(-6px) scale(0.96); }
+      75% { transform: translateZ(calc(var(--dice-size) / -2)) rotateX(1120deg) rotateY(870deg) rotateZ(560deg) translateY(-18px) scale(1.06); }
+      100% { transform: translateZ(calc(var(--dice-size) / -2)) rotateX(1440deg) rotateY(1080deg) rotateZ(720deg) translateY(0); }
+    }
+
+    .cube-face {
+      position: absolute;
+      width: var(--dice-size);
+      height: var(--dice-size);
+      background: #ffffff;
+      border: 3.5px solid #cbd5e1;
+      border-radius: 15px;
+      box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.08), 0 6px 12px rgba(0,0,0,0.3);
+      display: grid;
+      grid-template: repeat(3, 1fr) / repeat(3, 1fr);
+      padding: 6px;
+      box-sizing: border-box;
+      backface-visibility: visible;
+    }
+
+    .pip {
+      width: 12px;
+      height: 12px;
+      background: #1e293b;
+      border-radius: 50%;
+      margin: auto;
+      box-shadow: inset 0 2px 3px rgba(0,0,0,0.5);
+    }
+    .pip.red-center {
+      background: #e11d48;
+      width: 20px;
+      height: 20px;
+    }
+
+    .face-1 { transform: rotateY(0deg) translateZ(38px); }
+    .face-6 { transform: rotateY(180deg) translateZ(38px); }
+    .face-3 { transform: rotateY(90deg) translateZ(38px); }
+    .face-4 { transform: rotateY(-90deg) translateZ(38px); }
+    .face-5 { transform: rotateX(90deg) translateZ(38px); }
+    .face-2 { transform: rotateX(-90deg) translateZ(38px); }
+
+    /* ウェイポイントマーカー */
+    .waypoint-pin {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      border: 2px solid rgba(255, 255, 255, 0.85);
+      background: rgba(255, 255, 255, 0.35);
+      cursor: pointer;
+      transition: all 0.15s ease;
+      z-index: 10;
+    }
+    .waypoint-pin:hover {
+      transform: translate(-50%, -50%) scale(1.6);
+      background: #f59e0b;
+      box-shadow: 0 0 12px #f59e0b;
+      z-index: 30;
+    }
+    .waypoint-pin.edit-mode {
+      width: 22px;
+      height: 22px;
+      border-width: 2px;
+      background: rgba(239, 68, 68, 0.85);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: 900;
+      color: #fff;
+      cursor: grab;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+      z-index: 40;
+    }
+    .waypoint-pin.edit-mode:active {
+      cursor: grabbing;
+      transform: translate(-50%, -50%) scale(1.2);
+    }
+
+    /* 警備員コマ */
+    .guard-token {
+      position: absolute;
+      transform: translate(-50%, -85%);
+      transition: left 0.28s cubic-bezier(0.34, 1.56, 0.64, 1), top 0.28s cubic-bezier(0.34, 1.56, 0.64, 1), transform 0.2s ease;
+      cursor: pointer;
+      filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.7));
+      pointer-events: auto;
+    }
+    .guard-token.active-turn {
+      animation: guardBounce 0.65s infinite alternate cubic-bezier(0.4, 0, 0.6, 1);
+      z-index: 45 !important;
+    }
+    @keyframes guardBounce {
+      0% { transform: translate(-50%, -85%) scale(1.15) translateY(0); }
+      100% { transform: translate(-50%, -85%) scale(1.15) translateY(-9px); filter: drop-shadow(0 10px 8px rgba(0, 0, 0, 0.8)); }
+    }
+
+    /* 物理ボタン押下フラッシュ */
+    .btn-press-flash {
+      animation: flashScreenBorder 0.38s ease-out;
+    }
+    @keyframes flashScreenBorder {
+      0% { box-shadow: inset 0 0 0 10px #38bdf8, inset 0 0 50px rgba(56, 189, 248, 0.8); }
+      100% { box-shadow: inset 0 0 0 0 transparent; }
     }
   </style>
 </head>
-<body>
+<body class="p-2 md:p-3 min-h-screen flex flex-col justify-between">
 
-  <!-- ================= スマホ（子機） ================= -->
-  <div id="client-view">
-    <div id="reg-screen" class="card">
-      <h2 style="margin-bottom:12px;">🚨 チーム登録</h2>
-      <p style="color:#94a3b8; font-size:0.9rem; margin-bottom:16px;">自席のチームを選択してください</p>
-      <div style="display:flex; flex-direction:column; gap:10px;">
-        <button onclick="registerTeam(1, 'チーム1（赤）', '#ef4444')" style="background:#ef4444; color:#fff; padding:14px; border:none; border-radius:10px; font-weight:bold; font-size:1.1rem; cursor:pointer;">赤チーム（第1長机）</button>
-        <button onclick="registerTeam(2, 'チーム2（青）', '#3b82f6')" style="background:#3b82f6; color:#fff; padding:14px; border:none; border-radius:10px; font-weight:bold; font-size:1.1rem; cursor:pointer;">青チーム（第2長机）</button>
-        <button onclick="registerTeam(3, 'チーム3（黄）', '#eab308')" style="background:#eab308; color:#000; padding:14px; border:none; border-radius:10px; font-weight:bold; font-size:1.1rem; cursor:pointer;">黄チーム（第3長机）</button>
-        <button onclick="registerTeam(4, 'チーム4（緑）', '#22c55e')" style="background:#22c55e; color:#fff; padding:14px; border:none; border-radius:10px; font-weight:bold; font-size:1.1rem; cursor:pointer;">緑チーム（第4長机）</button>
-        <button onclick="registerTeam(5, 'チーム5（紫）', '#a855f7')" style="background:#a855f7; color:#fff; padding:14px; border:none; border-radius:10px; font-weight:bold; font-size:1.1rem; cursor:pointer;">紫チーム（第5長机）</button>
+  <!-- ヘッダーツールバー -->
+  <header class="bg-slate-900/95 backdrop-blur-md rounded-2xl border border-slate-700 p-2.5 mb-2 shadow-xl flex flex-wrap items-center justify-between gap-2">
+    <div class="flex items-center gap-2.5">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-amber-500 text-white flex items-center justify-center text-lg shadow-md border border-white/20">
+        <i class="fa-solid fa-building-shield"></i>
+      </div>
+      <div>
+        <h1 class="text-sm md:text-base font-black text-white tracking-tight flex items-center gap-1.5">
+          裁判クイズ・オフィスビル警備すごろく
+          <span class="text-[10px] bg-emerald-500/20 text-emerald-300 font-bold px-2 py-0.5 rounded-full border border-emerald-400/30">
+            完全連動版
+          </span>
+        </h1>
+        <p class="text-[10px] text-slate-400 font-medium">1Fエントランス ➔ 2Fオフィス ➔ 3Fテラス ➔ 屋上庭園 (GOAL!)</p>
       </div>
     </div>
 
-    <div id="play-screen" class="card" style="display:none;">
-      <div id="my-badge" style="display:inline-block; padding:6px 18px; border-radius:20px; font-weight:bold; margin-bottom:12px; font-size:1.1rem;"></div>
-      <h3 id="client-msg" style="color:#94a3b8; margin:12px 0;">出題をお待ちください…</h3>
+    <!-- 各種コントロールボタン群 -->
+    <div class="flex items-center flex-wrap gap-1.5">
+      <!-- イラスト画像登録・差し替え -->
+      <label class="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl text-xs font-black shadow-md flex items-center gap-1.5 transition active:scale-95 cursor-pointer">
+        <i class="fa-solid fa-image"></i>
+        <span id="uploadBtnText">イラスト画像を設定</span>
+        <input type="file" id="imageFileInput" accept="image/*" class="hidden" onchange="handleImageFileSelect(event)">
+      </label>
 
-      <!-- 4択ボタン -->
-      <div class="ans-grid" id="ans-box" style="display:none;">
-        <button class="btn-ans btn-1" onclick="sendAns(1)">①<span class="ans-sub">赤</span></button>
-        <button class="btn-ans btn-2" onclick="sendAns(2)">②<span class="ans-sub">青</span></button>
-        <button class="btn-ans btn-3" onclick="sendAns(3)">③<span class="ans-sub">黄</span></button>
-        <button class="btn-ans btn-4" onclick="sendAns(4)">④<span class="ans-sub">緑</span></button>
+      <!-- 座標微調整モード切替ボタン -->
+      <button id="calibrationToggleBtn" onclick="toggleCalibrationMode()" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold border border-slate-600 flex items-center gap-1 transition">
+        <i class="fa-solid fa-crosshairs text-amber-400"></i>
+        <span>マスの位置微調整</span>
+      </button>
+
+      <!-- 物理ボタン待機インジケーター -->
+      <div id="btStatusBadge" class="flex items-center gap-1.5 bg-emerald-950/80 border border-emerald-500/50 text-emerald-300 px-2.5 py-1 rounded-xl text-xs font-bold shadow-inner">
+        <span class="relative flex h-2 w-2">
+          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+          <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+        </span>
+        <span>ボタン受付 [<kbd id="currentKeyDisplay" class="bg-slate-950 px-1 py-0.5 rounded border border-emerald-500/40 font-mono text-[10px] text-emerald-200">A / Space</kbd>]</span>
       </div>
 
-      <!-- 判定バナー -->
-      <div id="res-banner" class="res-box"></div>
+      <!-- クイズ出題カード -->
+      <button onclick="openQuizModal()" class="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-black shadow-md flex items-center gap-1 transition active:scale-95">
+        <i class="fa-solid fa-scale-balanced text-amber-300"></i> クイズ出題
+      </button>
+
+      <!-- 20問カウンター -->
+      <div class="flex items-center gap-1 bg-slate-950 border border-slate-700 rounded-xl px-2 py-0.5">
+        <span class="text-xs font-black text-amber-400" id="questionLabel">第 1 問 / 20 問</span>
+        <button onclick="changeQuestion(-1)" class="w-5 h-5 rounded bg-slate-800 hover:bg-slate-700 text-white flex items-center justify-center text-[10px] font-bold">
+          <i class="fa-solid fa-chevron-left"></i>
+        </button>
+        <button onclick="changeQuestion(1)" class="w-5 h-5 rounded bg-blue-600 hover:bg-blue-500 text-white flex items-center justify-center text-[10px] font-bold">
+          <i class="fa-solid fa-chevron-right"></i>
+        </button>
+      </div>
+
+      <!-- キー設定 & サウンド & 全画面 -->
+      <button onclick="openKeySettingsModal()" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold border border-slate-700" title="Bluetoothキー設定">
+        <i class="fa-solid fa-gear"></i>
+      </button>
+      <button onclick="toggleSound()" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold border border-slate-700" title="音量切替">
+        <i class="fa-solid fa-volume-high" id="soundIcon"></i>
+      </button>
+      <button onclick="toggleFullscreen()" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold border border-slate-700" title="全画面表示">
+        <i class="fa-solid fa-expand"></i>
+      </button>
+      <button onclick="confirmReset()" class="text-xs text-slate-500 hover:text-rose-400 font-bold px-1" title="位置リセット">
+        <i class="fa-solid fa-rotate-left"></i>
+      </button>
+    </div>
+  </header>
+
+  <main class="grid grid-cols-1 lg:grid-cols-12 gap-2 flex-1 items-start">
+
+    <!-- 左側：盤面フレーム（8カラム） -->
+    <section class="lg:col-span-8 flex flex-col gap-1.5">
+      <!-- 座標調整バー（微調整モード時のみ表示） -->
+      <div id="calibrationBar" class="hidden bg-amber-500/20 border border-amber-400 text-amber-200 px-3 py-1.5 rounded-xl text-xs flex items-center justify-between font-bold">
+        <div class="flex items-center gap-2">
+          <i class="fa-solid fa-wrench text-amber-400"></i>
+          <span>【位置調整中】赤い番号ピンを直接ドラッグしてイラストのタイルの真上に移動してください。</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="resetCalibrationToDefault()" class="px-2 py-0.5 bg-rose-600 hover:bg-rose-500 text-white rounded text-[11px]">初期位置に戻す</button>
+          <button onclick="toggleCalibrationMode()" class="px-2.5 py-0.5 bg-amber-400 hover:bg-amber-300 text-slate-950 rounded text-[11px] font-black">調整完了</button>
+        </div>
+      </div>
+
+      <!-- 16:9比率固定盤面 -->
+      <div class="board-frame" id="boardStage">
+        <!-- 背景画像要素 -->
+        <img 
+          src="watermarked_img_9980905747072171036.jpg" 
+          alt="オフィスビルすごろく盤面" 
+          id="boardImage"
+          class="w-full h-full object-cover block pointer-events-none"
+          onerror="handleImageFallback(this)"
+        />
+
+        <!-- スタートピン（1F） -->
+        <div class="absolute bottom-[17%] left-[12%] bg-rose-600/95 border-2 border-white text-white text-[10px] md:text-xs font-black px-2.5 py-0.5 rounded-full shadow-xl pointer-events-none flex items-center gap-1 z-20 animate-pulse">
+          <i class="fa-solid fa-flag text-amber-300"></i> START（1Fエントランス）
+        </div>
+
+        <!-- ゴールピン（屋上庭園） -->
+        <div class="absolute top-[13%] right-[11%] bg-amber-500/95 border-2 border-white text-slate-950 text-[10px] md:text-xs font-black px-3 py-0.5 rounded-full shadow-2xl pointer-events-none flex items-center gap-1 z-20 animate-bounce">
+          <i class="fa-solid fa-crown text-rose-600"></i> 屋上庭園 (GOAL!)
+        </div>
+
+        <!-- マス目マーカーレイヤー -->
+        <div id="waypointsLayer" class="absolute inset-0 pointer-events-none"></div>
+
+        <!-- 5色警備員コマレイヤー -->
+        <div id="guardsLayer" class="absolute inset-0 pointer-events-none"></div>
+      </div>
+
+      <div class="flex items-center justify-between text-[11px] text-slate-400 px-2 font-medium">
+        <span>🚩 1Fエントランス ➔ 地下 ➔ 2F会議室・オフィス ➔ 3Fテラス ➔ 屋上庭園 (※3Fサーバー室は迂回)</span>
+        <span>Bluetoothボタン（A / Space）対応</span>
+      </div>
+    </section>
+
+    <!-- 右側：サイコロ・手番・チーム一覧（4カラム） -->
+    <aside class="lg:col-span-4 flex flex-col gap-2">
+
+      <!-- 現在の手番アナウンスカード -->
+      <div id="turnBanner" class="rounded-2xl border-2 p-2.5 text-white shadow-xl transition-all duration-300 flex items-center justify-between" style="background-color: #ef4444; border-color: #b91c1c;">
+        <div class="flex items-center gap-2">
+          <div id="bannerGuardIcon" class="w-11 h-11 rounded-xl bg-white/20 backdrop-blur-md p-1 flex items-center justify-center border-2 border-white/40 shadow-sm"></div>
+          <div>
+            <div class="text-[10px] uppercase tracking-wider font-extrabold text-white/90 flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-white animate-ping"></span>
+              現在の手番チーム
+            </div>
+            <div class="text-base font-black leading-tight" id="activeTeamBannerText">
+              次は 赤警備員（チーム1）！
+            </div>
+          </div>
+        </div>
+        <div class="text-right">
+          <span class="text-[11px] bg-white/25 backdrop-blur-md px-2 py-0.5 rounded-lg font-black border border-white/40 shadow-sm block animate-pulse">
+            ボタン押下！
+          </span>
+        </div>
+      </div>
+
+      <!-- 3D立体サイコロカード -->
+      <div class="bg-slate-900/90 rounded-2xl border border-slate-700 shadow-xl p-2.5 text-center relative overflow-hidden backdrop-blur-md">
+        <div class="flex items-center justify-between mb-0.5">
+          <h2 class="text-xs font-black text-slate-300 flex items-center gap-1.5">
+            <i class="fa-solid fa-dice text-amber-400 text-sm"></i> 判定サイコロ
+          </h2>
+          <div class="flex items-center bg-slate-950 p-0.5 rounded-xl border border-slate-800 text-[10px] font-black">
+            <button id="range13" onclick="setDiceRange(3)" class="px-2 py-0.5 rounded-lg bg-blue-600 text-white font-black">1〜3 (標準)</button>
+            <button id="range16" onclick="setDiceRange(6)" class="px-2 py-0.5 rounded-lg text-slate-400 font-bold">1〜6 (高速)</button>
+          </div>
+        </div>
+
+        <!-- 3Dサイコロ本体 -->
+        <div class="dice-scene cursor-pointer" onclick="triggerRoll()" title="クリックまたはBluetoothボタンでロール">
+          <div class="cube" id="cube">
+            <div class="cube-face face-1"><div></div><div></div><div></div><div></div><div class="pip red-center"></div><div></div><div></div><div></div><div></div></div>
+            <div class="cube-face face-2"><div class="pip"></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div class="pip"></div></div>
+            <div class="cube-face face-3"><div class="pip"></div><div></div><div></div><div></div><div class="pip"></div><div></div><div></div><div></div><div class="pip"></div></div>
+            <div class="cube-face face-4"><div class="pip"></div><div></div><div class="pip"></div><div></div><div></div><div></div><div class="pip"></div><div></div><div class="pip"></div></div>
+            <div class="cube-face face-5"><div class="pip"></div><div></div><div class="pip"></div><div></div><div class="pip"></div><div></div><div class="pip"></div><div></div><div class="pip"></div></div>
+            <div class="cube-face face-6"><div class="pip"></div><div></div><div class="pip"></div><div class="pip"></div><div></div><div class="pip"></div><div class="pip"></div><div></div><div class="pip"></div></div>
+          </div>
+        </div>
+
+        <div class="h-6 flex items-center justify-center my-0.5">
+          <span id="diceResultBadge" class="text-xs font-black text-amber-300 bg-amber-950/60 border border-amber-500/50 px-3 py-0.5 rounded-full shadow-inner">
+            ボタン（A / Space）で振る
+          </span>
+        </div>
+
+        <div class="flex flex-col gap-1 mt-1">
+          <button id="rollBtn" onclick="triggerRoll()" class="w-full py-1.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black rounded-xl shadow-md text-xs transition active:scale-95 flex items-center justify-center gap-1.5">
+            <i class="fa-solid fa-play"></i> サイコロを振る
+          </button>
+
+          <div class="flex items-center justify-between text-[11px] bg-slate-950/80 border border-slate-800 px-2 py-1 rounded-xl">
+            <label class="flex items-center gap-1 cursor-pointer font-bold text-slate-300">
+              <input type="checkbox" id="autoAdvanceCheck" checked class="w-3.5 h-3.5 text-blue-600 rounded">
+              自動で歩行＆次の手番へ
+            </label>
+            <button onclick="nextTurnManual()" class="text-blue-400 hover:text-blue-300 font-black underline">
+              手番スキップ ➔
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 5色警備員チーム進捗カード -->
+      <div class="bg-slate-900/90 rounded-2xl border border-slate-700 shadow-xl p-2 flex-1 flex flex-col backdrop-blur-md">
+        <div class="flex items-center justify-between mb-1 px-1">
+          <h2 class="text-xs font-black text-slate-300 flex items-center gap-1.5">
+            <i class="fa-solid fa-shield-halved text-blue-400"></i> 5色警備員チーム進捗
+          </h2>
+          <span class="text-[10px] text-slate-400">クリックで手番指定</span>
+        </div>
+        <div class="flex flex-col gap-1 overflow-y-auto max-h-[220px] pr-0.5" id="teamControlList"></div>
+      </div>
+
+    </aside>
+  </main>
+
+  <!-- 裁判クイズ出題モーダル -->
+  <div id="quizModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md hidden items-center justify-center z-50 p-4">
+    <div class="bg-slate-900 max-w-2xl w-full rounded-3xl p-5 shadow-2xl border-2 border-indigo-500/50 text-white relative">
+      <div class="flex items-center justify-between mb-3">
+        <div class="flex items-center gap-2">
+          <span class="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white text-base">
+            <i class="fa-solid fa-scale-balanced"></i>
+          </span>
+          <h3 class="text-base font-black text-indigo-300">裁判クイズ・事件発生！</h3>
+        </div>
+        <button onclick="closeQuizModal()" class="text-slate-400 hover:text-white font-black text-2xl leading-none">&times;</button>
+      </div>
+
+      <div class="bg-slate-800/90 rounded-2xl p-3.5 border border-slate-700 mb-3">
+        <div class="text-xs font-bold text-amber-400 mb-1">【施設管理責任・過失割合】</div>
+        <div class="text-sm md:text-base font-black text-white leading-relaxed">
+          雨の日にビルの1Fエントランスで来館者が濡れた床で滑って転倒し骨折。管理側は「防滑マットを敷き、注意看板を設置し、定期的にモップ清掃していた」。裁判所の過失判断はどうなった？
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3">
+        <div class="p-2.5 rounded-xl bg-slate-800 border border-slate-700 font-bold text-xs md:text-sm text-slate-200">
+          <span class="text-blue-400 mr-1.5">①</span>ビルの全面勝訴（過失割合 0%）
+        </div>
+        <div class="p-2.5 rounded-xl bg-slate-800 border border-slate-700 font-bold text-xs md:text-sm text-slate-200">
+          <span class="text-emerald-400 mr-1.5">②</span>ビル側に30%の過失（看板があっても不十分）
+        </div>
+        <div class="p-2.5 rounded-xl bg-slate-800 border border-slate-700 font-bold text-xs md:text-sm text-slate-200">
+          <span class="text-amber-400 mr-1.5">③</span>ビル側に70%の過失（自動ドア前は厳重責任）
+        </div>
+        <div class="p-2.5 rounded-xl bg-slate-800 border border-slate-700 font-bold text-xs md:text-sm text-slate-200">
+          <span class="text-purple-400 mr-1.5">④</span>過失相殺により五分五分
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <button onclick="toggleAnswerExplanation()" class="w-full py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded-xl text-xs font-black text-amber-300 flex items-center justify-center gap-1.5">
+          <i class="fa-solid fa-lightbulb"></i> 正解・判例の要点を表示する
+        </button>
+        <div id="quizExplanationBox" class="hidden mt-2 p-2.5 bg-emerald-950/60 border border-emerald-500/50 rounded-xl text-xs text-emerald-200 leading-relaxed">
+          <strong class="text-amber-300 font-bold">【正解：① ビル側の過失なし（過失0%）】</strong><br>
+          通常要求される程度の防滑マット設置・注意看板・モップ清掃等の巡回注意義務を適切に履行していた場合、不可避的な転倒事故において管理瑕疵は否定される傾向にあります。
+        </div>
+      </div>
+
+      <div class="flex justify-between items-center text-xs">
+        <span class="text-slate-400">正解チームがBluetoothボタンでサイコロを振ります！</span>
+        <button onclick="closeQuizModal()" class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-black">
+          盤面に戻る
+        </button>
+      </div>
     </div>
   </div>
 
-
-  <!-- ================= PC（親機） ================= -->
-  <div id="host-view">
-    <header>
-      <div style="display:flex; align-items:center; gap:16px;">
-        <h2>🏢 オフィスビル警備 裁判クイズすごろく</h2>
-        <span style="background:#334155; padding:4px 12px; border-radius:20px; font-size:0.9rem;">第 1 問 / 全 20 問</span>
+  <!-- Bluetoothボタンキー設定モーダル -->
+  <div id="keySettingModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md hidden items-center justify-center z-50 p-4">
+    <div class="bg-slate-900 max-w-md w-full rounded-2xl p-5 shadow-2xl border-2 border-indigo-500/50 text-white">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="text-base font-black text-indigo-300 flex items-center gap-2">
+          <i class="fa-brands fa-bluetooth-b text-blue-400"></i> Bluetooth物理ボタンの学習
+        </h3>
+        <button onclick="closeKeySettingsModal()" class="text-slate-400 hover:text-white font-black text-xl leading-none">&times;</button>
       </div>
-      <div style="display:flex; gap:10px;">
-        <label style="background:#475569; color:#fff; padding:8px 14px; border-radius:8px; cursor:pointer; font-size:0.9rem; display:flex; align-items:center;">
-          🖼️ 背景画像を選択
-          <input type="file" accept="image/*" onchange="uploadImage(this)" style="display:none;">
-        </label>
-        <button onclick="showQR()" style="background:var(--accent); color:#000; padding:8px 16px; border:none; border-radius:8px; font-weight:bold; cursor:pointer;">📱 QR表示</button>
-        <button onclick="openQuestionModal()" style="background:#22c55e; color:#fff; padding:8px 16px; border:none; border-radius:8px; font-weight:bold; cursor:pointer;">❓ 出題する</button>
-      </div>
-    </header>
 
-    <div class="host-body">
-      <!-- サイドバー -->
-      <div class="sidebar">
-        <h3>チーム状況</h3>
-        <div id="host-team-status" style="display:flex; flex-direction:column; gap:8px;"></div>
-        <div style="margin-top:auto; background:#0f172a; padding:16px; border-radius:8px; text-align:center;">
-          <h4 id="turn-announcement" style="color:var(--accent);">サイコロ待機中</h4>
-          <p style="font-size:0.8rem; color:#94a3b8; margin-top:6px;">正解チームにサイコロボタン（Aキー / Space）を渡してください</p>
+      <p class="text-xs text-slate-300 mb-3 leading-relaxed">
+        お持ちのBluetoothボタン（プレゼンター等）を1回押すだけで、そのキー信号を即座に登録します。
+      </p>
+
+      <div id="keyCaptureBox" class="border-2 border-dashed border-indigo-500/60 bg-indigo-950/40 rounded-xl p-3.5 text-center mb-3">
+        <div class="text-[11px] text-indigo-300 font-bold mb-1">現在認識するキー:</div>
+        <div class="text-lg font-black text-indigo-200 font-mono" id="currentKeysListDisplay">KeyA (A), Space, Enter</div>
+        <button id="startCaptureBtn" onclick="startKeyCapture()" class="mt-2 px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold transition shadow-md">
+          <i class="fa-solid fa-fingerprint mr-1"></i> ボタンを押してキーを学習
+        </button>
+        <div id="captureHint" class="hidden text-xs text-rose-400 font-bold mt-2 animate-pulse">
+          お手元のボタンを「カチッ」と1回押してください...
         </div>
       </div>
 
-      <!-- すごろく盤面エリア -->
-      <div class="board-frame" id="board-frame">
-        <img id="board-bg-img" class="board-img" style="display:none;" alt="すごろくマップ">
-        <div id="fallback-msg" class="fallback-board">
-          <h3>🏢 すごろく盤面待機中</h3>
-          <p>右上の「🖼️ 背景画像を選択」から、先ほどのビルイラスト画像を登録できます。<br>（一度登録すると次回以降も自動で表示されます）</p>
+      <div class="mb-3">
+        <div class="text-[11px] font-bold text-slate-400 mb-1">プリセット:</div>
+        <div class="flex flex-wrap gap-1.5">
+          <button onclick="setPresetKeys(['KeyA', 'a', 'A'])" class="text-xs px-2.5 py-1 bg-slate-800 hover:bg-slate-700 rounded-lg font-bold text-slate-200">A キー</button>
+          <button onclick="setPresetKeys(['Space', ' '])" class="text-xs px-2.5 py-1 bg-slate-800 hover:bg-slate-700 rounded-lg font-bold text-slate-200">Space</button>
+          <button onclick="setPresetKeys(['Enter'])" class="text-xs px-2.5 py-1 bg-slate-800 hover:bg-slate-700 rounded-lg font-bold text-slate-200">Enter</button>
+          <button onclick="setPresetKeys(['KeyA', 'Space', ' ', 'Enter'])" class="text-xs px-2.5 py-1 bg-indigo-900 hover:bg-indigo-800 rounded-lg font-bold text-indigo-200 border border-indigo-500/40">すべて許可 (推奨)</button>
         </div>
-        <div id="tokens-container"></div>
       </div>
+
+      <button onclick="closeKeySettingsModal()" class="w-full py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold text-xs">
+        完了・閉じる
+      </button>
     </div>
+  </div>
 
-    <!-- QRモーダル -->
-    <div id="qr-modal" class="modal" style="display:none;">
-      <div class="modal-card">
-        <h2>スマホでQRコードを読み取ってください</h2>
-        <p style="color:#94a3b8; margin-top:8px;">長机ごとに代表者1台が接続してください</p>
-        <div id="qrcode" style="background:#fff; padding:16px; display:inline-block; border-radius:12px; margin:16px 0;"></div>
-        <br>
-        <button onclick="document.getElementById('qr-modal').style.display='none'" style="padding:10px 24px; background:#475569; color:#fff; border:none; border-radius:8px; cursor:pointer;">閉じる</button>
-      </div>
-    </div>
-
-    <!-- 出題モーダル -->
-    <div id="quiz-modal" class="modal" style="display:none;">
-      <div class="modal-card" style="text-align:left;">
-        <h2 style="color:var(--accent);">第 1 問：雨の日の転倒事故</h2>
-        <p style="font-size:1.2rem; line-height:1.6; margin:16px 0;">
-          雨天時にエントランスに吸水マットを設置していたが、傘の水滴で濡れた大理石床で来館者が転倒負傷。ビルの管理瑕疵（過失割合）はどう判断された？
-        </p>
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:20px;">
-          <div style="padding:14px; background:#ef444433; border:2px solid #ef4444; border-radius:8px;">① 管理者側の責任なし（0%）</div>
-          <div style="padding:14px; background:#3b82f633; border:2px solid #3b82f6; border-radius:8px;">② 管理者側20%の過失</div>
-          <div style="padding:14px; background:#eab30833; border:2px solid #eab308; border-radius:8px;">③ 管理者側50%の過失</div>
-          <div style="padding:14px; background:#22c55e33; border:2px solid #22c55e; border-radius:8px;">④ 管理者側80%の過失</div>
-        </div>
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-          <span id="answered-badge" style="color:var(--accent); font-weight:bold; font-size:1.1rem;">回答待ち...</span>
-          <button onclick="reveal(1)" style="padding:12px 24px; background:#eab308; color:#000; font-weight:bold; border:none; border-radius:8px; cursor:pointer;">正解発表（①番）</button>
-        </div>
-      </div>
+  <!-- イベントポップアップモーダル -->
+  <div id="eventModal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md hidden items-center justify-center z-50 p-4">
+    <div class="bg-slate-900 max-w-sm w-full rounded-2xl p-5 shadow-2xl border-4 border-amber-400 text-center relative overflow-hidden text-white">
+      <div id="modalGuardAvatar" class="w-16 h-16 mx-auto mb-1.5 flex items-center justify-center"></div>
+      <div id="modalTeamBadge" class="text-xs font-black px-3 py-0.5 rounded-full inline-block text-white mb-2 shadow-md">チーム1</div>
+      <h3 id="modalTitle" class="text-base font-black text-amber-300 mb-1">イベント名</h3>
+      <p id="modalDesc" class="text-xs font-medium text-slate-300 mb-4 leading-relaxed">効果内容</p>
+      <button onclick="closeModal()" class="w-full py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 rounded-xl font-black text-xs shadow-lg">
+        確認（次のチームへ）
+      </button>
     </div>
   </div>
 
   <script>
-    // Firebase初期化
-    const firebaseConfig = {
-      apiKey: "AIzaSyDummyKeyForRealtimeDatabase",
-      projectId: "sugoroku-app-ce293",
-      databaseURL: "https://sugoroku-app-ce293-default-rtdb.firebaseio.com"
-    };
+    // デフォルトのウェイポイント座標（全36マス：新イラストのタイルの中心座標をマッピング）
+    const defaultWaypoints = [
+      // 1段目（下層：1Fエントランス ➔ 地下駐車場前）
+      { id: 1,  x: 21.0, y: 81.5, title: '1F エントランス (START)', area: '1F', effect: '警備巡回スタート！' },
+      { id: 2,  x: 24.5, y: 78.5, title: '入館セキュリティゲート', area: '1F', effect: '入館証スムーズ照合（+1マス）', move: 1 },
+      { id: 3,  x: 28.0, y: 76.0, title: '雨天防滑マット設置', area: '1F', effect: '安全配慮義務の履行・過失なし' },
+      { id: 4,  x: 31.5, y: 73.5, title: '不審者目撃アラート', area: '1F', effect: '慎重な身元確認（-1マス）', move: -1 },
+      { id: 5,  x: 52.0, y: 74.0, title: '地下駐車場入口スロープ', area: '地下', effect: '車両出入庫安全確認' },
+      { id: 6,  x: 56.0, y: 71.5, title: '地下設備点検通路', area: '地下', effect: '設備瑕疵なし・順調' },
+      { id: 7,  x: 60.0, y: 69.0, title: '防災備蓄倉庫', area: '地下', effect: 'AED点検完了（+1マス）', move: 1 },
+      { id: 8,  x: 64.0, y: 71.0, title: '非常用発電機エリア', area: '地下', effect: '法定点検クリア' },
+      { id: 9,  x: 68.0, y: 74.0, title: '受水槽ポンプ室', area: '地下', effect: '給水圧力正常' },
+      { id: 10, x: 74.0, y: 81.0, title: '2F連絡階段アプローチ', area: '地下階段', effect: '階段を上がって2階へ！' },
 
-    let db = null;
-    let stateRef = null;
-    try {
-      if (!firebase.apps.length) {
-        firebase.initializeApp(firebaseConfig);
-      }
-      db = firebase.database();
-      stateRef = db.ref('game_state');
-    } catch(e) {
-      console.warn('Firebase connection notice:', e);
-    }
+      // 2段目（中層：会議室 ➔ 中央通路 ➔ 2Fオフィス執務室）
+      { id: 11, x: 78.0, y: 71.0, title: '2F 会議室前ロビー', area: '2F会議室', effect: '来客受付記録確認' },
+      { id: 12, x: 74.5, y: 68.5, title: '大会議室・重要商談', area: '2F会議室', effect: '機密保持確認（+1マス）', move: 1 },
+      { id: 13, x: 70.5, y: 66.0, title: '通路の段差注意', area: '2F通路', effect: '注意喚起看板で足止め（-1マス）', move: -1 },
+      { id: 14, x: 66.5, y: 63.0, title: '共有スペースOA配線', area: '2F通路', effect: '安全確認完了' },
+      { id: 15, x: 62.5, y: 60.5, title: '2F 中央エレベーター前', area: '2F中央', effect: '定期保守ログ照合' },
+      { id: 16, x: 58.5, y: 58.0, title: '非常通報装置テスト', area: '2F中央', effect: '通報テスト完了' },
+      { id: 17, x: 54.5, y: 55.5, title: '執務エリア境界ゲート', area: '2F通路', effect: 'IDカード認証' },
+      { id: 18, x: 50.5, y: 53.0, title: '防犯カメラ映像確保', area: '2F通路', effect: '決定的証拠を発見！（+2マス）', move: 2 },
+      { id: 19, x: 46.5, y: 50.5, title: '2F 執務室エントランス', area: '2F執務室', effect: 'オフィス巡回開始' },
+      { id: 20, x: 41.5, y: 46.5, title: '共有複合機の放置書類', area: '2F執務室', effect: '機密保持の注意喚起（-1マス）', move: -1 },
+      { id: 21, x: 36.5, y: 49.5, title: '個人情報クリアデスク', area: '2F執務室', effect: '施錠管理の模範例（+1マス）', move: 1 },
+      { id: 22, x: 31.5, y: 53.0, title: '執務デスク島点検', area: '2F執務室', effect: '巡回良好' },
+      { id: 23, x: 26.5, y: 57.0, title: '西側非常口確認', area: '2F執務室', effect: '避難経路確保' },
+      { id: 24, x: 21.0, y: 61.5, title: '3Fテラス連絡階段', area: '2F階段', effect: '上層テラスへ登る！' },
 
-    const params = new URLSearchParams(window.location.search);
-    const isClient = params.has('client');
-
-    const teamMeta = [
-      { id: 1, name: 'チーム1（赤）', color: '#ef4444' },
-      { id: 2, name: 'チーム2（青）', color: '#3b82f6' },
-      { id: 3, name: 'チーム3（黄）', color: '#eab308' },
-      { id: 4, name: 'チーム4（緑）', color: '#22c55e' },
-      { id: 5, name: 'チーム5（紫）', color: '#a855f7' }
+      // 3段目（上層：3Fテラス ➔ 中央連絡路 ➔ 屋上庭園 ※サーバー室は完全迂回）
+      { id: 25, x: 27.0, y: 34.5, title: '3F テラス連絡デッキ', area: '3Fテラス', effect: '上層エリアへ突入！' },
+      { id: 26, x: 31.0, y: 35.5, title: 'カフェ・パントリー前', area: '3Fカフェ', effect: '火気不使用チェッククリア' },
+      { id: 27, x: 35.0, y: 34.0, title: 'リフレッシュラウンジ', area: '3Fラウンジ', effect: '快適な環境維持（+1マス）', move: 1 },
+      { id: 28, x: 39.0, y: 31.5, title: '法務コンプライアンス室前', area: '3F法務', effect: '最高裁判例を精密調査' },
+      { id: 29, x: 43.5, y: 28.5, title: '重要機密保管庫', area: '3F法務', effect: '二重ロック確認（+1マス）', move: 1 },
+      { id: 30, x: 48.0, y: 26.0, title: '高層連絡ブリッジ中央', area: '3F通路', effect: '耐震伸縮継手正常' },
+      { id: 31, x: 53.0, y: 28.5, title: '屋上直通エスカレーター', area: '3F通路', effect: '一気に上階へ（+1マス）', move: 1 },
+      { id: 32, x: 58.0, y: 32.5, title: '屋上アプローチ階段下', area: 'RF階段', effect: '最終階段を登る' },
+      { id: 33, x: 63.0, y: 31.0, title: '屋上連絡階段踊り場', area: 'RF階段', effect: '安全確認完了' },
+      { id: 34, x: 68.0, y: 28.5, title: '避難誘導灯点検', area: 'RF', effect: '視認性クリア' },
+      { id: 35, x: 73.0, y: 25.5, title: '屋上最終セキュリティ扉', area: 'RF', effect: '暗証解除成功！（+1マス）', move: 1 },
+      { id: 36, x: 81.0, y: 23.0, title: '屋上庭園 (GOAL!)', area: 'RF屋上庭園', effect: '🏆 オフィスビル全点検完遂！最優秀警備チーム！', type: 'goal' }
     ];
 
-    let myTeamId = null;
+    const CALIBRATION_STORAGE_KEY = 'office_sugoroku_calibrated_waypoints';
+    let waypoints = JSON.parse(JSON.stringify(defaultWaypoints));
+    let isCalibrationMode = false;
 
-    // 画面切り替え判定
-    if (!isClient) {
-      // ------------------------------------
-      // 親機（PC）
-      // --------------------------------
+    // 保存済みのキャリブレーション座標を読み込む
+    function loadCalibratedCoordinates() {
+      const saved = localStorage.getItem(CALIBRATION_STORAGE_KEY);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length === defaultWaypoints.length) {
+            waypoints = parsed;
+          }
+        } catch (e) {
+          console.warn('Could not parse saved coordinates', e);
+        }
+      }
+    }
+
+    function saveCalibratedCoordinates() {
+      try {
+        localStorage.setItem(CALIBRATION_STORAGE_KEY, JSON.stringify(waypoints));
+      } catch (e) {
+        console.warn('Failed to save coordinates', e);
+      }
+    }
+
+    function resetCalibrationToDefault() {
+      waypoints = JSON.parse(JSON.stringify(defaultWaypoints));
+      saveCalibratedCoordinates();
+      renderWaypoints();
+      renderGuardsOnBoard();
+      playSound('result');
+    }
+
+    function toggleCalibrationMode() {
+      isCalibrationMode = !isCalibrationMode;
+      const bar = document.getElementById('calibrationBar');
+      const btn = document.getElementById('calibrationToggleBtn');
+
+      if (isCalibrationMode) {
+        bar.classList.remove('hidden');
+        btn.classList.add('bg-amber-500', 'text-slate-950', 'font-black');
+        btn.classList.remove('bg-slate-800', 'text-slate-200');
+      } else {
+        bar.classList.add('hidden');
+        btn.classList.remove('bg-amber-500', 'text-slate-950', 'font-black');
+        btn.classList.add('bg-slate-800', 'text-slate-200');
+        saveCalibratedCoordinates();
+      }
+      renderWaypoints();
+      renderGuardsOnBoard();
+    }
+
+    // --- STREAMING_CHUNK:Implementing guard tokens, audio synthesizer, and drag handling ---
+    const teams = [
+      { id: 1, name: 'チーム1', colorName: '赤', color: '#ef4444', darkColor: '#991b1b', currentStep: 1 },
+      { id: 2, name: 'チーム2', colorName: '青', color: '#3b82f6', darkColor: '#1d4ed8', currentStep: 1 },
+      { id: 3, name: 'チーム3', colorName: '黄', color: '#eab308', darkColor: '#a16207', currentStep: 1 },
+      { id: 4, name: 'チーム4', colorName: '緑', color: '#10b981', darkColor: '#047857', currentStep: 1 },
+      { id: 5, name: 'チーム5', colorName: '紫', color: '#a855f7', darkColor: '#7e22ce', currentStep: 1 }
+    ];
+
+    let currentTurnTeamIndex = 0;
+    let currentQuestion = 1;
+    let diceMax = 3;
+    let isRolling = false;
+    let soundEnabled = true;
+
+    let triggerKeys = ['KeyA', 'a', 'A', 'Space', ' ', 'Enter'];
+    let isCapturingKey = false;
+
+    // 高精細SVG警備員コマ
+    function getGuardSvg(color, darkColor, size = 32) {
+      return `
+        <svg width="${size}" height="${size}" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <ellipse cx="32" cy="58" rx="20" ry="5.5" fill="#000000" fill-opacity="0.5" />
+          <path d="M15 60C15 46 22 40 32 40C42 40 49 46 49 60H15Z" fill="${color}" />
+          <rect x="15" y="44" width="7" height="3" rx="1.5" fill="#FACC15" />
+          <rect x="42" y="44" width="7" height="3" rx="1.5" fill="#FACC15" />
+          <rect x="16" y="36" width="3" height="7" rx="1" fill="#1E293B" />
+          <line x1="17.5" y1="36" x2="17.5" y2="30" stroke="#0F172A" stroke-width="1.8" stroke-linecap="round" />
+          <polygon points="32,40 26,48 38,48" fill="#FFFFFF" />
+          <polygon points="32,42 30,55 32,58 34,55" fill="${darkColor}" />
+          <circle cx="38" cy="46" r="2.8" fill="#FACC15" stroke="#CA8A04" stroke-width="0.8" />
+          <circle cx="32" cy="29" r="14" fill="#FFDFC4" />
+          <ellipse cx="23" cy="32.5" rx="2.5" ry="1.5" fill="#F87171" opacity="0.65"/>
+          <ellipse cx="41" cy="32.5" rx="2.5" ry="1.5" fill="#F87171" opacity="0.65"/>
+          <circle cx="26" cy="28.5" r="2.2" fill="#0F172A" />
+          <circle cx="38" cy="28.5" r="2.2" fill="#0F172A" />
+          <circle cx="27" cy="27.8" r="0.8" fill="#FFFFFF" />
+          <circle cx="39" cy="27.8" r="0.8" fill="#FFFFFF" />
+          <path d="M29 33.5 Q32 36.5 35 33.5" stroke="#7C2D12" stroke-width="1.6" stroke-linecap="round" fill="none" />
+          <path d="M18 23C18 13 24 11 32 11C40 11 46 13 46 23Z" fill="${color}" />
+          <rect x="17" y="21" width="30" height="3.8" rx="1" fill="#0F172A" />
+          <polygon points="32,15 35.5,21.5 28.5,21.5" fill="#FACC15" stroke="#CA8A04" stroke-width="0.7" />
+          <ellipse cx="32" cy="23.8" rx="16" ry="3.2" fill="#020617" />
+        </svg>
+      `;
+    }
+
+    // Web Audio API によるサウンド生成
+    let audioCtx = null;
+    function initAudio() {
+      if (!audioCtx && soundEnabled) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+    }
+
+    function toggleSound() {
+      soundEnabled = !soundEnabled;
+      document.getElementById('soundIcon').className = soundEnabled ? 'fa-solid fa-volume-high' : 'fa-solid fa-volume-xmark text-slate-500';
+    }
+
+    function playSound(type) {
+      if (!soundEnabled) return;
+      try {
+        initAudio();
+        if (!audioCtx) return;
+        const now = audioCtx.currentTime;
+
+        if (type === 'tick') {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(500 + Math.random() * 200, now);
+          gain.gain.setValueAtTime(0.12, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.045);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start(now);
+          osc.stop(now + 0.045);
+        } else if (type === 'result') {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(523.25, now);
+          osc.frequency.exponentialRampToValueAtTime(659.25, now + 0.16);
+          gain.gain.setValueAtTime(0.28, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.32);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start(now);
+          osc.stop(now + 0.32);
+        } else if (type === 'step') {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(800, now);
+          gain.gain.setValueAtTime(0.14, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start(now);
+          osc.stop(now + 0.05);
+        } else if (type === 'fanfare') {
+          const notes = [523.25, 659.25, 783.99, 1046.5];
+          notes.forEach((freq, idx) => {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(freq, now + idx * 0.11);
+            gain.gain.setValueAtTime(0.25, now + idx * 0.11);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.11 + 0.38);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(now + idx * 0.11);
+            osc.stop(now + idx * 0.11 + 0.38);
+          });
+        }
+      } catch (e) {
+        console.warn('Audio error:', e);
+      }
+    }
+
+    // --- STREAMING_CHUNK:Connecting background image loader with drag-and-drop support ---
+    const BG_STORAGE_KEY = 'office_sugoroku_bg_image_data';
+
+    function initImageLoader() {
+      const savedImage = localStorage.getItem(BG_STORAGE_KEY);
+      const imgElem = document.getElementById('boardImage');
+      if (savedImage) {
+        imgElem.src = savedImage;
+        document.getElementById('uploadBtnText').innerText = '画像を差し替える';
+      }
+
+      // ドラッグ＆ドロップ対応
+      const stage = document.getElementById('boardStage');
+      stage.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        stage.style.outline = '4px dashed #38bdf8';
+      });
+      stage.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        stage.style.outline = 'none';
+      });
+      stage.addEventListener('drop', (e) => {
+        e.preventDefault();
+        stage.style.outline = 'none';
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+          applyImageFile(e.dataTransfer.files[0]);
+        }
+      });
+    }
+
+    function handleImageFileSelect(event) {
+      if (event.target.files && event.target.files.length > 0) {
+        applyImageFile(event.target.files[0]);
+      }
+    }
+
+    function applyImageFile(file) {
+      if (!file.type.startsWith('image/')) {
+        alert('画像ファイル（PNGまたはJPG）を選択してください。');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const base64Data = e.target.result;
+        document.getElementById('boardImage').src = base64Data;
+        document.getElementById('uploadBtnText').innerText = '画像を差し替える';
+        try {
+          localStorage.setItem(BG_STORAGE_KEY, base64Data);
+        } catch (err) {
+          console.warn('LocalStorage limit exceeded', err);
+        }
+        playSound('result');
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function handleImageFallback(imgElem) {
+      imgElem.src = "data:image/svg+xml;utf8," + encodeURIComponent(`
+        <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+          <rect width="1600" height="900" fill="#0f172a"/>
+          <text x="800" y="450" font-family="sans-serif" font-size="28" font-weight="900" fill="#94a3b8" text-anchor="middle">
+            イラスト画像を右上のボタンから設定、またはここにドラッグ＆ドロップしてください
+          </text>
+        </svg>
+      `);
+    }
+
+    // --- STREAMING_CHUNK:Handling interactive waypoint pinning and dragging logic ---
+    let draggedWaypoint = null;
+
+    function renderWaypoints() {
+      const layer = document.getElementById('waypointsLayer');
+      layer.innerHTML = '';
+
+      waypoints.forEach(wp => {
+        const pin = document.createElement('div');
+        pin.id = `waypoint-pin-${wp.id}`;
+        pin.className = `waypoint-pin pointer-events-auto ${isCalibrationMode ? 'edit-mode' : ''}`;
+        pin.style.left = `${wp.x}%`;
+        pin.style.top = `${wp.y}%`;
+
+        if (isCalibrationMode) {
+          pin.innerText = wp.id;
+          pin.onmousedown = (e) => startDragWaypoint(e, wp);
+          pin.ontouchstart = (e) => startDragWaypoint(e, wp);
+        } else {
+          pin.title = `#${wp.id} ${wp.title} (${wp.area})`;
+          pin.onclick = () => showWaypointDetails(wp);
+        }
+
+        layer.appendChild(pin);
+      });
+    }
+
+    function startDragWaypoint(e, wp) {
+      if (!isCalibrationMode) return;
+      e.preventDefault();
+      draggedWaypoint = wp;
+
+      const stage = document.getElementById('boardStage');
+      const rect = stage.getBoundingClientRect();
+
+      function onMove(ev) {
+        if (!draggedWaypoint) return;
+        const clientX = ev.touches ? ev.touches[0].clientX : ev.clientX;
+        const clientY = ev.touches ? ev.touches[0].clientY : ev.clientY;
+
+        const xPct = Math.min(99, Math.max(1, ((clientX - rect.left) / rect.width) * 100));
+        const yPct = Math.min(99, Math.max(1, ((clientY - rect.top) / rect.height) * 100));
+
+        draggedWaypoint.x = parseFloat(xPct.toFixed(1));
+        draggedWaypoint.y = parseFloat(yPct.toFixed(1));
+
+        const pinElem = document.getElementById(`waypoint-pin-${draggedWaypoint.id}`);
+        if (pinElem) {
+          pinElem.style.left = `${draggedWaypoint.x}%`;
+          pinElem.style.top = `${draggedWaypoint.y}%`;
+        }
+        renderGuardsOnBoard();
+      }
+
+      function onEnd() {
+        draggedWaypoint = null;
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onEnd);
+        window.removeEventListener('touchmove', onMove);
+        window.removeEventListener('touchend', onEnd);
+        saveCalibratedCoordinates();
+      }
+
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onEnd);
+      window.addEventListener('touchmove', onMove);
+      window.addEventListener('touchend', onEnd);
+    }
+
+    // コマの描画（同一マスに複数いる場合は重ならないよう自動分散）
+    function renderGuardsOnBoard() {
+      const layer = document.getElementById('guardsLayer');
+      layer.innerHTML = '';
+
+      const cellOccupancy = {};
+      teams.forEach((team, idx) => {
+        if (!cellOccupancy[team.currentStep]) cellOccupancy[team.currentStep] = [];
+        cellOccupancy[team.currentStep].push({ team, idx });
+      });
+
+      Object.keys(cellOccupancy).forEach(stepStr => {
+        const step = parseInt(stepStr, 10);
+        const wp = waypoints.find(w => w.id === step) || waypoints[0];
+        const occupants = cellOccupancy[step];
+
+        occupants.forEach((item, occIdx) => {
+          const { team, idx } = item;
+          const isCurrentActive = idx === currentTurnTeamIndex;
+
+          let offsetX = 0;
+          let offsetY = 0;
+          if (occupants.length > 1) {
+            const spreadRadius = 2.0;
+            const angle = (occIdx / occupants.length) * Math.PI * 2;
+            offsetX = Math.cos(angle) * spreadRadius;
+            offsetY = Math.sin(angle) * (spreadRadius * 0.55);
+          }
+
+          const token = document.createElement('div');
+          token.className = `guard-token ${isCurrentActive ? 'active-turn' : ''}`;
+          token.style.left = `${wp.x + offsetX}%`;
+          token.style.top = `${wp.y + offsetY}%`;
+          token.style.zIndex = isCurrentActive ? 45 : (20 + occIdx);
+          token.title = `${team.name}（現在 #${wp.id} ${wp.title}）`;
+          token.innerHTML = getGuardSvg(team.color, team.darkColor, isCurrentActive ? 36 : 28);
+
+          token.onclick = (e) => {
+            e.stopPropagation();
+            selectTeamTurn(idx);
+          };
+
+          layer.appendChild(token);
+        });
+      });
+    }
+
+    // --- STREAMING_CHUNK:Implementing dice roll kinematics and turn advancement ---
+    const faceRotations = {
+      1: { x: 0,   y: 0 },
+      2: { x: 90,  y: 0 },
+      3: { x: 0,   y: -90 },
+      4: { x: 0,   y: 90 },
+      5: { x: -90, y: 0 },
+      6: { x: 0,   y: 180 }
+    };
+
+    function setDiceRange(val) {
+      diceMax = val;
+      const r13 = document.getElementById('range13');
+      const r16 = document.getElementById('range16');
+      if (val === 3) {
+        r13.className = 'px-2 py-0.5 rounded-lg bg-blue-600 text-white font-black';
+        r16.className = 'px-2 py-0.5 rounded-lg text-slate-400 font-bold';
+      } else {
+        r16.className = 'px-2 py-0.5 rounded-lg bg-blue-600 text-white font-black';
+        r13.className = 'px-2 py-0.5 rounded-lg text-slate-400 font-bold';
+      }
+    }
+
+    window.addEventListener('keydown', (e) => {
+      if (isCapturingKey) {
+        e.preventDefault();
+        triggerKeys = [e.code, e.key];
+        isCapturingKey = false;
+        document.getElementById('captureHint').classList.add('hidden');
+        updateKeyDisplay();
+        return;
+      }
+
+      if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
+
+      const isMatched = triggerKeys.some(tk => 
+        tk === e.code ||
+        tk === e.key ||
+        tk.toLowerCase() === e.key.toLowerCase()
+      );
+
+      if (isMatched) {
+        e.preventDefault();
+        document.body.classList.add('btn-press-flash');
+        setTimeout(() => document.body.classList.remove('btn-press-flash'), 380);
+
+        triggerRoll();
+      }
+    });
+
+    function triggerRoll() {
+      if (isRolling) return;
+      isRolling = true;
+      initAudio();
+
+      const currentTeam = teams[currentTurnTeamIndex];
+      const cube = document.getElementById('cube');
+      const rollBtn = document.getElementById('rollBtn');
+      const badge = document.getElementById('diceResultBadge');
+
+      rollBtn.disabled = true;
+      badge.innerText = `${currentTeam.name} がサイコロ中...`;
+      badge.className = 'text-xs font-black text-amber-300 bg-amber-950/80 px-3 py-0.5 rounded-full animate-pulse border border-amber-500/50';
+
+      cube.classList.add('rolling');
+      const tickTimer = setInterval(() => playSound('tick'), 120);
+
+      const targetValue = Math.floor(Math.random() * diceMax) + 1;
+
+      setTimeout(() => {
+        clearInterval(tickTimer);
+        cube.classList.remove('rolling');
+
+        const base = faceRotations[targetValue];
+        const extraSpins = 4;
+        const targetRotX = base.x + (360 * extraSpins);
+        const targetRotY = base.y + (360 * extraSpins);
+
+        cube.style.transform = `translateZ(calc(var(--dice-size) / -2)) rotateX(${targetRotX}deg) rotateY(${targetRotY}deg)`;
+        playSound('result');
+
+        badge.innerHTML = `<span class="text-sm font-black text-amber-400 mr-1">${targetValue}</span> が出ました！`;
+        badge.className = 'text-xs font-black text-emerald-200 bg-emerald-950 border border-emerald-500/50 px-3 py-0.5 rounded-full shadow-md';
+
+        rollBtn.disabled = false;
+        isRolling = false;
+
+        const autoAdvance = document.getElementById('autoAdvanceCheck').checked;
+        if (autoAdvance) {
+          setTimeout(() => {
+            advanceCurrentTeam(targetValue);
+          }, 700);
+        }
+      }, 1150);
+    }
+
+    function advanceCurrentTeam(steps) {
+      const team = teams[currentTurnTeamIndex];
+      let remaining = steps;
+
+      function stepOneByOne() {
+        if (remaining > 0 && team.currentStep < waypoints.length) {
+          team.currentStep++;
+          remaining--;
+          playSound('step');
+          renderGuardsOnBoard();
+          renderTeamControls();
+          setTimeout(stepOneByOne, 280);
+        } else {
+          handleCellLand(team);
+        }
+      }
+
+      stepOneByOne();
+    }
+
+    function handleCellLand(team) {
+      const cell = waypoints.find(w => w.id === team.currentStep);
+      if (!cell) return;
+
+      if (cell.type === 'goal' || team.currentStep >= waypoints.length) {
+        if (window.confetti) {
+          confetti({ particleCount: 140, spread: 90, origin: { y: 0.6 } });
+        }
+        showModal(team, cell, '🏆 ゴール達成！屋上庭園到着！', `${team.name} がオフィスビルの全点検を完全踏破し、屋上庭園へ到達しました！`, 'fanfare');
+      } else if (cell.move && cell.move > 0) {
+        setTimeout(() => {
+          showModal(team, cell, '⚡ イベント：有利な進展！', `${cell.title}：${cell.effect}`, 'result');
+          team.currentStep = Math.min(waypoints.length, team.currentStep + cell.move);
+          renderGuardsOnBoard();
+          renderTeamControls();
+          passTurnToNext();
+        }, 350);
+        return;
+      } else if (cell.move && cell.move < 0) {
+        setTimeout(() => {
+          showModal(team, cell, '⚠️ イベント：瑕疵・トラブル対応', `${cell.title}：${cell.effect}`, 'tick');
+          team.currentStep = Math.max(1, team.currentStep + cell.move);
+          renderGuardsOnBoard();
+          renderTeamControls();
+          passTurnToNext();
+        }, 350);
+        return;
+      }
+
+      passTurnToNext();
+    }
+
+    function passTurnToNext() {
+      currentTurnTeamIndex = (currentTurnTeamIndex + 1) % teams.length;
+      updateTurnBanner();
+      renderGuardsOnBoard();
+      renderTeamControls();
+    }
+
+    function nextTurnManual() {
+      passTurnToNext();
+    }
+
+    function selectTeamTurn(index) {
+      currentTurnTeamIndex = index;
+      updateTurnBanner();
+      renderGuardsOnBoard();
+      renderTeamControls();
+    }
+
+    function updateTurnBanner() {
+      const team = teams[currentTurnTeamIndex];
+      const banner = document.getElementById('turnBanner');
+      const text = document.getElementById('activeTeamBannerText');
+      const iconContainer = document.getElementById('bannerGuardIcon');
+
+      banner.style.backgroundColor = team.color;
+      banner.style.borderColor = team.darkColor;
+      text.innerText = `次は ${team.colorName}警備員（${team.name}）の番！`;
+      iconContainer.innerHTML = getGuardSvg(team.color, team.darkColor, 38);
+    }
+
+    // --- STREAMING_CHUNK:Rendering team sidebar cards and manual adjustments ---
+    function renderTeamControls() {
+      const container = document.getElementById('teamControlList');
+      container.innerHTML = '';
+
+      teams.forEach((team, idx) => {
+        const currentWp = waypoints.find(w => w.id === team.currentStep) || waypoints[0];
+        const isCurrentActive = idx === currentTurnTeamIndex;
+
+        const card = document.createElement('div');
+        card.className = `p-1.5 rounded-xl border text-xs flex items-center justify-between cursor-pointer transition ${
+          isCurrentActive ? 'border-blue-400 bg-blue-950/70 shadow-md ring-2 ring-blue-400' : 'border-slate-800 bg-slate-950/80 hover:bg-slate-800'
+        }`;
+        card.onclick = () => selectTeamTurn(idx);
+
+        card.innerHTML = `
+          <div class="flex items-center gap-2">
+            <div class="w-6 h-6 rounded-lg flex items-center justify-center bg-slate-800 border border-slate-700 shadow-xs">
+              ${getGuardSvg(team.color, team.darkColor, 20)}
+            </div>
+            <div>
+              <div class="font-black text-white flex items-center gap-1.5">
+                ${team.name}
+                ${isCurrentActive ? '<span class="text-[9px] bg-blue-500 text-white px-1 py-0.1 rounded-full font-bold">手番</span>' : ''}
+              </div>
+              <div class="text-[10px] text-slate-400 font-medium truncate max-w-[140px]">
+                #${team.currentStep} ${currentWp.title}
+              </div>
+            </div>
+          </div>
+          <div class="flex items-center gap-1" onclick="event.stopPropagation()">
+            <button onclick="manualAdjustTeam(${idx}, -1)" class="w-5 h-5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-black flex items-center justify-center text-[10px] border border-slate-700">-1</button>
+            <button onclick="manualAdjustTeam(${idx}, 1)" class="w-5 h-5 rounded bg-blue-900/80 hover:bg-blue-800 text-blue-200 font-black flex items-center justify-center text-[10px] border border-blue-500/50">+1</button>
+            <button onclick="manualAdjustTeam(${idx}, 2)" class="w-5 h-5 rounded bg-blue-900/80 hover:bg-blue-800 text-blue-200 font-black flex items-center justify-center text-[10px] border border-blue-500/50">+2</button>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    function manualAdjustTeam(teamIdx, delta) {
+      const team = teams[teamIdx];
+      team.currentStep = Math.max(1, Math.min(waypoints.length, team.currentStep + delta));
+      renderGuardsOnBoard();
+      renderTeamControls();
+    }
+
+    // --- STREAMING_CHUNK:Managing modals, quiz dialogs, and key capture workflow ---
+    function showModal(team, cell, title, desc, soundType) {
+      if (soundType) playSound(soundType);
+      const modal = document.getElementById('eventModal');
+      const teamBadge = document.getElementById('modalTeamBadge');
+      const avatarBox = document.getElementById('modalGuardAvatar');
+
+      teamBadge.innerText = team.name;
+      teamBadge.style.backgroundColor = team.color;
+      avatarBox.innerHTML = getGuardSvg(team.color, team.darkColor, 52);
+
+      document.getElementById('modalTitle').innerText = title || cell.title;
+      document.getElementById('modalDesc').innerText = desc || cell.effect;
+
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function showWaypointDetails(wp) {
+      const modal = document.getElementById('eventModal');
+      const teamBadge = document.getElementById('modalTeamBadge');
+      const avatarBox = document.getElementById('modalGuardAvatar');
+
+      teamBadge.innerText = `マス #${wp.id} (${wp.area})`;
+      teamBadge.style.backgroundColor = '#475569';
+      avatarBox.innerHTML = `<i class="fa-solid fa-map-pin text-amber-400 text-3xl"></i>`;
+
+      document.getElementById('modalTitle').innerText = wp.title;
+      document.getElementById('modalDesc').innerText = `巡回状況：${wp.effect}`;
+
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeModal() {
+      const modal = document.getElementById('eventModal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    function openQuizModal() {
+      document.getElementById('quizModal').classList.remove('hidden');
+      document.getElementById('quizModal').classList.add('flex');
+    }
+
+    function closeQuizModal() {
+      document.getElementById('quizModal').classList.add('hidden');
+      document.getElementById('quizModal').classList.remove('flex');
+      document.getElementById('quizExplanationBox').classList.add('hidden');
+    }
+
+    function toggleAnswerExplanation() {
+      const exp = document.getElementById('quizExplanationBox');
+      exp.classList.toggle('hidden');
+      if (!exp.classList.contains('hidden')) {
+        playSound('result');
+      }
+    }
+
+    function changeQuestion(delta) {
+      currentQuestion = Math.max(1, Math.min(20, currentQuestion + delta));
+      document.getElementById('questionLabel').innerText = `第 ${currentQuestion} 問 / 20 問`;
+      playSound('tick');
+    }
+
+    function toggleFullscreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(err => console.warn(err));
+      } else {
+        if (document.exitFullscreen) document.exitFullscreen();
+      }
+    }
+
+    function confirmReset() {
+      teams.forEach(t => t.currentStep = 1);
+      currentTurnTeamIndex = 0;
+      currentQuestion = 1;
+      changeQuestion(0);
+      document.getElementById('diceResultBadge').innerText = 'ボタン（A / Space）で振る';
+      const cube = document.getElementById('cube');
+      cube.style.transform = `translateZ(calc(var(--dice-size) / -2)) rotateX(-22deg) rotateY(-32deg)`;
+      renderGuardsOnBoard();
+      renderTeamControls();
+      updateTurnBanner();
+    }
+
+    function openKeySettingsModal() {
+      document.getElementById('keySettingModal').classList.remove('hidden');
+      document.getElementById('keySettingModal').classList.add('flex');
+      updateKeyDisplay();
+    }
+
+    function closeKeySettingsModal() {
+      isCapturingKey = false;
+      document.getElementById('captureHint').classList.add('hidden');
+      document.getElementById('keySettingModal').classList.add('hidden');
+      document.getElementById('keySettingModal').classList.remove('flex');
+    }
+
+    function startKeyCapture() {
+      isCapturingKey = true;
+      document.getElementById('captureHint').classList.remove('hidden');
+    }
+
+    function setPresetKeys(keys) {
+      triggerKeys = keys;
+      updateKeyDisplay();
+    }
+
+    function updateKeyDisplay() {
+      const displayStr = triggerKeys.join(', ');
+      document.getElementById('currentKeysListDisplay').innerText = displayStr;
+      document.getElementById('currentKeyDisplay').innerText = triggerKeys.slice(0, 2).join(' / ');
+    }
+
+    // --- STREAMING_CHUNK:Bootstrapping application on window load ---
+    window.onload = () => {
+      loadCalibratedCoordinates();
+      initImageLoader();
+      renderWaypoints();
+      renderGuardsOnBoard();
+      renderTeamControls();
+      updateTurnBanner();
+      updateKeyDisplay();
+    };
+  </script>
+</body>
+</html>
