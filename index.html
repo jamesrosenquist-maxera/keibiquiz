@@ -1,0 +1,1269 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>裁判クイズ・オフィスビルすごろく（スマホ連動）</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@600;700;800;900&display=swap');
+
+    :root {
+      --dice-size: 80px;
+    }
+
+    body {
+      font-family: 'M PLUS Rounded 1c', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
+    }
+
+    /* 16:9 盤面コンテナ */
+    .board-frame {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      background: #0f172a;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 16px 36px -8px rgba(0, 0, 0, 0.7);
+    }
+
+    /* 立体3Dダイス */
+    .dice-scene {
+      width: var(--dice-size);
+      height: var(--dice-size);
+      perspective: 600px;
+      margin: 0 auto;
+    }
+
+    .cube {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      transform-style: preserve-3d;
+      transform: translateZ(calc(var(--dice-size) / -2)) rotateX(-22deg) rotateY(-32deg);
+      transition: transform 1.2s cubic-bezier(0.18, 0.89, 0.32, 1.15);
+    }
+
+    .cube.rolling {
+      animation: wildRoll 1.1s infinite cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    @keyframes wildRoll {
+      0% { transform: translateZ(calc(var(--dice-size) / -2)) rotateX(0deg) rotateY(0deg) rotateZ(0deg) translateY(0); }
+      30% { transform: translateZ(calc(var(--dice-size) / -2)) rotateX(450deg) rotateY(240deg) rotateZ(180deg) translateY(-26px) scale(1.1); }
+      60% { transform: translateZ(calc(var(--dice-size) / -2)) rotateX(840deg) rotateY(600deg) rotateZ(400deg) translateY(-8px) scale(0.95); }
+      100% { transform: translateZ(calc(var(--dice-size) / -2)) rotateX(1440deg) rotateY(1080deg) rotateZ(720deg) translateY(0); }
+    }
+
+    .cube-face {
+      position: absolute;
+      width: var(--dice-size);
+      height: var(--dice-size);
+      background: #ffffff;
+      border: 3.5px solid #cbd5e1;
+      border-radius: 16px;
+      box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.08), 0 4px 10px rgba(0,0,0,0.3);
+      display: grid;
+      grid-template: repeat(3, 1fr) / repeat(3, 1fr);
+      padding: 6px;
+      box-sizing: border-box;
+      backface-visibility: visible;
+    }
+
+    .pip {
+      width: 13px;
+      height: 13px;
+      background: #1e293b;
+      border-radius: 50%;
+      margin: auto;
+      box-shadow: inset 0 2px 3px rgba(0,0,0,0.4);
+    }
+    .pip.red-center {
+      background: #e11d48;
+      width: 22px;
+      height: 22px;
+    }
+
+    .face-1 { transform: rotateY(0deg) translateZ(40px); }
+    .face-6 { transform: rotateY(180deg) translateZ(40px); }
+    .face-3 { transform: rotateY(90deg) translateZ(40px); }
+    .face-4 { transform: rotateY(-90deg) translateZ(40px); }
+    .face-5 { transform: rotateX(90deg) translateZ(40px); }
+    .face-2 { transform: rotateX(-90deg) translateZ(40px); }
+
+    /* コマのアニメーション */
+    .guard-token {
+      position: absolute;
+      transform: translate(-50%, -85%);
+      transition: left 0.28s cubic-bezier(0.34, 1.56, 0.64, 1), top 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+      cursor: pointer;
+      filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.7));
+    }
+    .guard-token.active-bounce {
+      animation: bouncePiece 0.65s infinite alternate cubic-bezier(0.4, 0, 0.6, 1);
+      z-index: 50 !important;
+    }
+    @keyframes bouncePiece {
+      0% { transform: translate(-50%, -85%) scale(1.18) translateY(0); }
+      100% { transform: translate(-50%, -85%) scale(1.18) translateY(-10px); }
+    }
+
+    /* 物理ボタン押下フラッシュ */
+    .screen-flash {
+      animation: btnFlash 0.38s ease-out;
+    }
+    @keyframes btnFlash {
+      0% { box-shadow: inset 0 0 0 12px #38bdf8, inset 0 0 60px rgba(56, 189, 248, 0.9); }
+      100% { box-shadow: inset 0 0 0 0 transparent; }
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col">
+
+  <!-- ========================================== -->
+  <!-- ========================================== -->
+  <div id="hostApp" class="flex flex-col flex-1 p-2 md:p-3 min-h-screen">
+    <!-- ヘッダー -->
+    <header class="bg-slate-900 border border-slate-800 rounded-2xl p-2.5 mb-2 shadow-xl flex flex-wrap items-center justify-between gap-2">
+      <div class="flex items-center gap-2.5">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-rose-500 text-white flex items-center justify-center text-lg shadow-md">
+          <i class="fa-solid fa-scale-balanced"></i>
+        </div>
+        <div>
+          <h1 class="text-sm md:text-base font-black text-white flex items-center gap-2">
+            裁判クイズ・オフィスビル警備すごろく
+            <span class="text-[10px] bg-blue-500/20 text-blue-300 font-bold px-2 py-0.5 rounded-full border border-blue-400/30">
+              親機（スクリーン投影）
+            </span>
+          </h1>
+          <p class="text-[10px] text-slate-400 font-medium">参加者はスマホでQRコードを読み取って回答！</p>
+        </div>
+      </div>
+
+      <div class="flex items-center flex-wrap gap-2">
+        <!-- QRコード展開ボタン -->
+        <button onclick="openQrModal()" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-black shadow-md flex items-center gap-1.5 transition">
+          <i class="fa-solid fa-qrcode text-amber-300"></i>
+          <span>スマホ参加用QRコード</span>
+        </button>
+
+        <!-- Bluetoothボタン状態 -->
+        <div class="flex items-center gap-1.5 bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 px-2.5 py-1 rounded-xl text-xs font-bold">
+          <span class="relative flex h-2 w-2">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+          </span>
+          <span>サイコロボタン [<kbd class="bg-slate-950 px-1 py-0.5 rounded border border-emerald-500/40 font-mono text-[10px]">A / Space</kbd>]</span>
+        </div>
+
+        <button onclick="toggleFullscreen()" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold border border-slate-700" title="全画面">
+          <i class="fa-solid fa-expand"></i>
+        </button>
+        <button onclick="switchView('client')" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded-xl text-xs font-bold border border-slate-700" title="スマホ子機画面プレビュー">
+          <i class="fa-solid fa-mobile-screen"></i> スマホ画面確認
+        </button>
+      </div>
+    </header>
+
+    <!-- メインコンテンツ -->
+    <main class="grid grid-cols-1 lg:grid-cols-12 gap-2.5 flex-1 items-start">
+
+      <!-- 左側：すごろく盤面 & 出題パネル（8カラム） -->
+      <section class="lg:col-span-8 flex flex-col gap-2">
+
+        <!-- 裁判クイズ出題バー＆進行コントロール -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-3 shadow-xl">
+          <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center gap-2">
+              <span class="px-2.5 py-0.5 bg-amber-500 text-slate-950 font-black rounded-lg text-xs" id="quizNumberBadge">
+                第 1 問 / 全 20 問
+              </span>
+              <span class="text-xs font-bold text-amber-300" id="quizCategoryBadge">【施設管理責任・過失割合】</span>
+            </div>
+            <!-- クイズ出題ステータスボタン -->
+            <div class="flex items-center gap-1.5">
+              <button id="btnOpenAnswer" onclick="openAnswering()" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black shadow-md flex items-center gap-1">
+                <i class="fa-solid fa-lock-open"></i> 解答受付開始
+              </button>
+              <button id="btnCloseAnswer" onclick="closeAnswering()" class="px-3 py-1 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-black shadow-md flex items-center gap-1 opacity-50 cursor-not-allowed" disabled>
+                <i class="fa-solid fa-lock"></i> 解答締切
+              </button>
+              <button id="btnRevealAnswer" onclick="revealAnswer()" class="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-black shadow-md flex items-center gap-1 opacity-50 cursor-not-allowed" disabled>
+                <i class="fa-solid fa-bullhorn text-amber-300"></i> 正解発表
+              </button>
+              <button onclick="nextQuiz(1)" class="w-7 h-7 rounded-xl bg-slate-800 hover:bg-slate-700 text-white flex items-center justify-center text-xs font-bold">
+                <i class="fa-solid fa-chevron-right"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- 問題文 -->
+          <div class="text-sm md:text-base font-black text-white leading-snug mb-2.5" id="quizQuestionText">
+            雨の日にビルの1Fエントランスで来館者が濡れた床で滑って転倒し骨折。管理側は「防滑マットを敷き、注意看板を設置し、定期的にモップ清掃していた」。裁判所の過失判断はどうなった？
+          </div>
+
+          <!-- 4択選択肢 -->
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-2" id="quizChoicesContainer">
+            <!-- 選択肢が動的に入る -->
+          </div>
+
+          <!-- 正解解説アコーディオン -->
+          <div id="quizExplanationBox" class="hidden p-2.5 bg-emerald-950/70 border border-emerald-500/50 rounded-xl text-xs text-emerald-200">
+            <!-- 解説文 -->
+          </div>
+        </div>
+
+        <!-- すごろく盤面フレーム -->
+        <div class="board-frame" id="boardStage">
+          <img 
+            src="watermarked_img_9980905747072171036.jpg" 
+            alt="オフィスビル断面図" 
+            id="boardImage"
+            class="w-full h-full object-cover block pointer-events-none"
+            onerror="this.src='https://placehold.co/1600x900/0f172a/94a3b8?text=Office+Building+Cross+Section'"
+          />
+          <div class="absolute bottom-[17%] left-[12%] bg-rose-600/95 border border-white text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-lg pointer-events-none">
+            START 1F
+          </div>
+          <div class="absolute top-[13%] right-[11%] bg-amber-500/95 border border-white text-slate-950 text-[10px] font-black px-2.5 py-0.5 rounded-full shadow-xl pointer-events-none animate-bounce">
+            GOAL 屋上庭園
+          </div>
+          <!-- マス目とコマのレイヤー -->
+          <div id="waypointsLayer" class="absolute inset-0 pointer-events-none"></div>
+          <div id="guardsLayer" class="absolute inset-0 pointer-events-none"></div>
+        </div>
+      </section>
+
+      <!-- 右側：サイコロ・ボタン手渡し指示・チーム状況（4カラム） -->
+      <aside class="lg:col-span-4 flex flex-col gap-2">
+
+        <!-- サイコロボタン手渡し指示バナー（最重要） -->
+        <div id="handoverBanner" class="rounded-2xl border-2 p-3 text-white shadow-xl transition-all duration-300 bg-slate-900 border-slate-700">
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-[10px] uppercase tracking-wider font-extrabold text-amber-300 flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
+              物理サイコロボタン手渡し
+            </span>
+            <span id="handoverQueueCount" class="text-[10px] bg-slate-800 px-2 py-0.5 rounded-full font-bold">
+              待機中
+            </span>
+          </div>
+          <div class="flex items-center gap-2.5">
+            <div id="handoverGuardAvatar" class="w-12 h-12 rounded-xl bg-white/10 p-1 flex items-center justify-center border border-white/20">
+              <i class="fa-solid fa-dice text-2xl text-slate-400"></i>
+            </div>
+            <div>
+              <div class="text-sm md:text-base font-black leading-tight text-white" id="handoverText">
+                正解発表をお待ちください
+              </div>
+              <div class="text-[11px] text-slate-300 font-medium" id="handoverSubText">
+                正解チームにボタンを手渡します
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3D立体ダイス -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-2.5 text-center shadow-xl">
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-xs font-black text-slate-300 flex items-center gap-1">
+              <i class="fa-solid fa-dice text-amber-400"></i> 判定サイコロ
+            </span>
+            <span id="diceResultBadge" class="text-xs font-black text-amber-300 bg-amber-950 px-2.5 py-0.5 rounded-full border border-amber-500/40">
+              ボタンでロール
+            </span>
+          </div>
+
+          <div class="dice-scene cursor-pointer py-1" onclick="triggerDiceRoll()">
+            <div class="cube" id="cube">
+              <div class="cube-face face-1"><div></div><div></div><div></div><div></div><div class="pip red-center"></div><div></div><div></div><div></div><div></div></div>
+              <div class="cube-face face-2"><div class="pip"></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div class="pip"></div></div>
+              <div class="cube-face face-3"><div class="pip"></div><div></div><div></div><div></div><div class="pip"></div><div></div><div></div><div></div><div class="pip"></div></div>
+              <div class="cube-face face-4"><div class="pip"></div><div></div><div class="pip"></div><div></div><div></div><div></div><div class="pip"></div><div></div><div class="pip"></div></div>
+              <div class="cube-face face-5"><div class="pip"></div><div></div><div class="pip"></div><div></div><div class="pip"></div><div></div><div class="pip"></div><div></div><div class="pip"></div></div>
+              <div class="cube-face face-6"><div class="pip"></div><div></div><div class="pip"></div><div class="pip"></div><div></div><div class="pip"></div><div class="pip"></div><div></div><div class="pip"></div></div>
+            </div>
+          </div>
+
+          <button id="rollBtn" onclick="triggerDiceRoll()" class="mt-2 w-full py-1.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black rounded-xl text-xs shadow-md transition active:scale-95 flex items-center justify-center gap-1.5">
+            <i class="fa-solid fa-play"></i> 画面クリックでも振る
+          </button>
+        </div>
+
+        <!-- 5チーム参加状況・回答状態一覧 -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-2.5 flex-1 flex flex-col shadow-xl">
+          <div class="flex items-center justify-between mb-1.5 px-1">
+            <span class="text-xs font-black text-slate-300 flex items-center gap-1.5">
+              <i class="fa-solid fa-users text-blue-400"></i> 参加5チーム（長机）状況
+            </span>
+            <span class="text-[10px] text-slate-400" id="answeredCountLabel">回答済 0/5</span>
+          </div>
+          <div class="flex flex-col gap-1.5" id="teamsListContainer">
+            <!-- 5チームのカード -->
+          </div>
+        </div>
+
+      </aside>
+    </main>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- ========================================== -->
+  <div id="clientApp" class="hidden min-h-screen flex flex-col bg-slate-950 text-white p-4">
+
+    <!-- 参加登録ステップ -->
+    <div id="clientJoinStep" class="flex-1 flex flex-col justify-center max-w-sm mx-auto w-full">
+      <div class="text-center mb-6">
+        <div class="w-16 h-16 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center text-3xl mx-auto mb-3 shadow-lg">
+          <i class="fa-solid fa-building-shield"></i>
+        </div>
+        <h2 class="text-xl font-black text-white">裁判クイズ・すごろく</h2>
+        <p class="text-xs text-slate-400 mt-1">スマホ回答コントローラー</p>
+      </div>
+
+      <div class="bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-2xl flex flex-col gap-4">
+        <div>
+          <label class="block text-xs font-bold text-slate-300 mb-1.5">長机の担当チーム（色）を選択</label>
+          <div class="grid grid-cols-5 gap-1.5" id="teamColorSelectGrid">
+            <!-- 5色の選択ボタン -->
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-300 mb-1.5">チーム名を入力（任意）</label>
+          <input type="text" id="clientTeamNameInput" placeholder="例：チーム法務A" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-sm font-bold text-white focus:outline-none focus:border-amber-400">
+        </div>
+
+        <button onclick="joinGameAsTeam()" class="w-full py-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black rounded-2xl text-base shadow-xl active:scale-95 transition">
+          参加する！
+        </button>
+      </div>
+
+      <div class="text-center mt-6">
+        <button onclick="switchView('host')" class="text-xs text-slate-500 underline font-bold">親機（スクリーン画面）に戻る</button>
+      </div>
+    </div>
+
+    <!-- ゲームプレイステップ（4択ボタン画面） -->
+    <div id="clientPlayStep" class="hidden flex-1 flex flex-col justify-between max-w-md mx-auto w-full h-full py-2">
+      <!-- 上部チーム情報ヘッダー -->
+      <div class="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-2xl px-4 py-3 shadow-md">
+        <div class="flex items-center gap-2.5">
+          <div id="clientTeamBadge" class="w-8 h-8 rounded-xl flex items-center justify-center font-black text-white text-sm shadow">1</div>
+          <div>
+            <div class="text-xs text-slate-400 font-bold">あなたのチーム</div>
+            <div class="text-sm font-black text-white" id="clientTeamNameDisplay">チーム1</div>
+          </div>
+        </div>
+        <div class="text-right">
+          <div class="text-[10px] text-slate-400 font-bold">クイズ番号</div>
+          <div class="text-xs font-black text-amber-400" id="clientQuizNumDisplay">第 1 問</div>
+        </div>
+      </div>
+
+      <!-- 中央：状態メッセージ -->
+      <div class="my-4 text-center px-2">
+        <div id="clientStatusBox" class="p-3 rounded-2xl bg-slate-900 border border-slate-800">
+          <div class="text-xs font-bold text-slate-400 mb-0.5" id="clientStatusSub">スクリーンをご覧ください</div>
+          <div class="text-base font-black text-white" id="clientStatusMain">出題を待っています...</div>
+        </div>
+      </div>
+
+      <!-- 下部：巨大な4択ボタンエリア -->
+      <div class="grid grid-cols-2 gap-3 flex-1 max-h-[360px]" id="clientChoiceButtonsGrid">
+        <button onclick="submitClientChoice(1)" id="btnChoice1" class="rounded-3xl bg-rose-600 hover:bg-rose-500 active:scale-95 transition flex flex-col items-center justify-center p-4 shadow-lg border-2 border-rose-400/50">
+          <span class="text-4xl font-black text-white mb-1">①</span>
+          <span class="text-xs font-black text-rose-200">赤</span>
+        </button>
+        <button onclick="submitClientChoice(2)" id="btnChoice2" class="rounded-3xl bg-blue-600 hover:bg-blue-500 active:scale-95 transition flex flex-col items-center justify-center p-4 shadow-lg border-2 border-blue-400/50">
+          <span class="text-4xl font-black text-white mb-1">②</span>
+          <span class="text-xs font-black text-blue-200">青</span>
+        </button>
+        <button onclick="submitClientChoice(3)" id="btnChoice3" class="rounded-3xl bg-amber-500 hover:bg-amber-400 active:scale-95 transition flex flex-col items-center justify-center p-4 shadow-lg border-2 border-amber-300/50">
+          <span class="text-4xl font-black text-slate-950 mb-1">③</span>
+          <span class="text-xs font-black text-amber-950">黄</span>
+        </button>
+        <button onclick="submitClientChoice(4)" id="btnChoice4" class="rounded-3xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 transition flex flex-col items-center justify-center p-4 shadow-lg border-2 border-emerald-400/50">
+          <span class="text-4xl font-black text-white mb-1">④</span>
+          <span class="text-xs font-black text-emerald-200">緑</span>
+        </button>
+      </div>
+
+      <div class="text-center mt-3">
+        <span class="text-[11px] text-slate-500 font-medium">※前方のスクリーンの問題を見て選択してください</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- QRコード表示モーダル -->
+  <div id="qrModal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md hidden items-center justify-center z-50 p-4">
+    <div class="bg-slate-900 max-w-sm w-full rounded-3xl p-6 shadow-2xl border-2 border-blue-500/50 text-center">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="text-base font-black text-white flex items-center gap-2">
+          <i class="fa-solid fa-qrcode text-amber-400"></i> スマホで参加
+        </h3>
+        <button onclick="closeQrModal()" class="text-slate-400 hover:text-white font-black text-xl leading-none">&times;</button>
+      </div>
+      <p class="text-xs text-slate-300 mb-4">スマホのカメラでスキャンしてチーム名を入力してください！</p>
+      
+      <div class="bg-white p-4 rounded-2xl inline-block shadow-inner mb-4" id="qrcode"></div>
+      
+      <div class="text-xs text-slate-400 mb-4 bg-slate-950 p-2.5 rounded-xl border border-slate-800 break-all font-mono" id="joinUrlDisplay">
+        -
+      </div>
+
+      <button onclick="closeQrModal()" class="w-full py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold text-xs">
+        閉じる
+      </button>
+    </div>
+  </div>
+
+  <!-- イベントポップアップモーダル -->
+  <div id="eventModal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md hidden items-center justify-center z-50 p-4">
+    <div class="bg-slate-900 max-w-sm w-full rounded-2xl p-5 shadow-2xl border-4 border-amber-400 text-center text-white">
+      <div id="modalGuardAvatar" class="w-14 h-14 mx-auto mb-1.5 flex items-center justify-center"></div>
+      <div id="modalTeamBadge" class="text-xs font-black px-3 py-0.5 rounded-full inline-block text-white mb-2 shadow-md">チーム1</div>
+      <h3 id="modalTitle" class="text-base font-black text-amber-300 mb-1">イベント名</h3>
+      <p id="modalDesc" class="text-xs font-medium text-slate-300 mb-4 leading-relaxed">効果内容</p>
+      <button onclick="closeEventModal()" class="w-full py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 text-slate-950 rounded-xl font-black text-xs shadow-lg">
+        確認（次へ）
+      </button>
+    </div>
+  </div>
+
+  <script>
+    // ==========================================
+    // ==========================================
+    const quizPreset = [
+      {
+        id: 1,
+        category: '【施設管理責任・過失割合】',
+        question: '雨の日にビルの1Fエントランスで来館者が濡れた床で滑って転倒し骨折。管理側は「防滑マットを敷き、注意看板を設置し、定期的にモップ清掃していた」。裁判所の過失判断はどうなった？',
+        choices: [
+          '① ビルの全面勝訴（過失0%）',
+          '② ビル側に30%の過失（看板があっても不十分）',
+          '③ ビル側に70%の過失（自動ドア前は厳重責任）',
+          '④ 過失相殺により五分五分（50%）'
+        ],
+        correct: 1,
+        explanation: '【正解：① ビル側の過失なし（過失0%）】\n通常要求される程度の防滑マット設置・注意看板・定期モップ清掃等の巡回注意義務を適切に履行していた場合、不可避的な転倒事故において管理瑕疵は否定される傾向にあります。'
+      },
+      {
+        id: 2,
+        category: '【正当防衛・不審者対応】',
+        question: 'ビル内で刃物のようなものをチラつかせる不審者を発見。警備員が刺股（さすまた）で取り押さえた際、相手が転倒して軽い打撲を負った。警備員の法的責任は？',
+        choices: [
+          '① 傷害罪が成立する（過剰防衛）',
+          '② 正当防衛（または正当業務行為）として違法性阻却',
+          '③ 警察官以外は制圧してはならず損害賠償責任',
+          '④ 相手の同意がないため民事上の不法行為'
+        ],
+        correct: 2,
+        explanation: '【正解：② 正当防衛・違法性阻却】\n急迫不正の侵害に対し、自己または他人の生命・身体を防衛するための相当性のある行為であり、正当防衛が成立し法的責任は問われません。'
+      },
+      {
+        id: 3,
+        category: '【機密漏洩・管理責任】',
+        question: 'テナント企業の従業員が、共有ゴミ箱に顧客情報が記載された書類をシュレッダーせずにそのまま破棄した。ビル管理会社に法的責任は及ぶか？',
+        choices: [
+          '① ビル側にも全責任がある（共同不法行為）',
+          '② 原則として廃棄したテナント企業の単独責任',
+          '③ 警備員がゴミ箱の中身を毎日点検する義務がある',
+          '④ 廃棄物処理法違反で管理会社が罰金刑'
+        ],
+        correct: 2,
+        explanation: '【正解：② テナント企業の単独責任】\nゴミ箱内の個々の廃棄物の内容まで精査する義務は管理会社には通常課されず、個人情報の漏洩責任は排出者であるテナント企業に帰属します。'
+      },
+      {
+        id: 4,
+        category: '【マスターキー紛失・民事責任】',
+        question: '委託警備員が全館マスターキーを紛失した。テナント全社からシリンダー全交換費用（数百万円）を請求された場合、判例上認められる賠償範囲は？',
+        choices: [
+          '① 鍵1本の再作成費用（数千円）のみ',
+          '② セキュリティ維持に客観的必要性がある範囲の交換費用',
+          '③ テナントの精神的慰謝料として全請求額の倍額',
+          '④ 紛失は不可抗力のため賠償不要'
+        ],
+        correct: 2,
+        explanation: '【正解：② 必要性がある範囲のシリンダー交換費用】\nマスターキー紛失により不正侵入の危険が具体的に生じるため、防犯上必要最小限のシリンダー全交換費用等は相当因果関係のある損害として認められます。'
+      },
+      {
+        id: 5,
+        category: '【漏水・工作物責任】',
+        question: '深夜、3Fの給湯室配管の経年劣化により破裂して漏水。2Fのテナントの精密機器が水浸しになった。民法717条の「工作物責任」における一次的な賠償責任者は？',
+        choices: [
+          '① ビルの所有者（オーナー）',
+          '② ビルの占有者（管理会社・賃借人など）',
+          '③ 水道局',
+          '④ 配管を施工した工務店'
+        ],
+        correct: 2,
+        explanation: '【正解：② 占有者が一次責任（過失がなければ所有者の無過失責任）】\n民法717条により、まず工作物の占有者が責任を負い、占有者が損害防止に必要な注意を払っていた場合は所有者が無過失責任を負います。'
+      }
+    ];
+
+    // マス目座標（全36マス：オフィスビル断面図に完全連動）
+    const waypoints = [
+      { id: 1,  x: 21.0, y: 81.5, title: '1F エントランス (START)', area: '1F', effect: '警備巡回スタート！' },
+      { id: 2,  x: 24.5, y: 78.5, title: 'セキュリティゲート', area: '1F', effect: '入館証スムーズ照合（+1マス）', move: 1 },
+      { id: 3,  x: 28.0, y: 76.0, title: '雨天防滑マット設置', area: '1F', effect: '安全配慮義務の履行・過失なし' },
+      { id: 4,  x: 31.5, y: 73.5, title: '不審者目撃アラート', area: '1F', effect: '慎重な身元確認（-1マス）', move: -1 },
+      { id: 5,  x: 52.0, y: 74.0, title: '地下駐車場入口スロープ', area: '地下', effect: '車両出入庫安全確認' },
+      { id: 6,  x: 56.0, y: 71.5, title: '地下設備点検通路', area: '地下', effect: '設備瑕疵なし・順調' },
+      { id: 7,  x: 60.0, y: 69.0, title: '防災備蓄倉庫', area: '地下', effect: 'AED点検完了（+1マス）', move: 1 },
+      { id: 8,  x: 64.0, y: 71.0, title: '非常用発電機エリア', area: '地下', effect: '法定点検クリア' },
+      { id: 9,  x: 68.0, y: 74.0, title: '受水槽ポンプ室', area: '地下', effect: '給水圧力正常' },
+      { id: 10, x: 74.0, y: 81.0, title: '2F連絡階段アプローチ', area: '地下階段', effect: '階段を上がって2階へ！' },
+      { id: 11, x: 78.0, y: 71.0, title: '2F 会議室前ロビー', area: '2F会議室', effect: '来客受付記録確認' },
+      { id: 12, x: 74.5, y: 68.5, title: '大会議室・重要商談', area: '2F会議室', effect: '機密保持確認（+1マス）', move: 1 },
+      { id: 13, x: 70.5, y: 66.0, title: '通路の段差注意', area: '2F通路', effect: '注意喚起看板で足止め（-1マス）', move: -1 },
+      { id: 14, x: 66.5, y: 63.0, title: '共有スペースOA配線', area: '2F通路', effect: '安全確認完了' },
+      { id: 15, x: 62.5, y: 60.5, title: '2F 中央エレベーター前', area: '2F中央', effect: '定期保守ログ照合' },
+      { id: 16, x: 58.5, y: 58.0, title: '非常通報装置テスト', area: '2F中央', effect: '通報テスト完了' },
+      { id: 17, x: 54.5, y: 55.5, title: '執務エリア境界ゲート', area: '2F通路', effect: 'IDカード認証' },
+      { id: 18, x: 50.5, y: 53.0, title: '防犯カメラ映像確保', area: '2F通路', effect: '決定的証拠を発見！（+2マス）', move: 2 },
+      { id: 19, x: 46.5, y: 50.5, title: '2F 執務室エントランス', area: '2F執務室', effect: 'オフィス巡回開始' },
+      { id: 20, x: 41.5, y: 46.5, title: '共有複合機の放置書類', area: '2F執務室', effect: '機密保持の注意喚起（-1マス）', move: -1 },
+      { id: 21, x: 36.5, y: 49.5, title: '個人情報クリアデスク', area: '2F執務室', effect: '施錠管理の模範例（+1マス）', move: 1 },
+      { id: 22, x: 31.5, y: 53.0, title: '執務デスク島点検', area: '2F執務室', effect: '巡回良好' },
+      { id: 23, x: 26.5, y: 57.0, title: '西側非常口確認', area: '2F執務室', effect: '避難経路確保' },
+      { id: 24, x: 21.0, y: 61.5, title: '3Fテラス連絡階段', area: '2F階段', effect: '上層テラスへ登る！' },
+      { id: 25, x: 27.0, y: 34.5, title: '3F テラス連絡デッキ', area: '3Fテラス', effect: '上層エリアへ突入！' },
+      { id: 26, x: 31.0, y: 35.5, title: 'カフェ・パントリー前', area: '3Fカフェ', effect: '火気不使用チェッククリア' },
+      { id: 27, x: 35.0, y: 34.0, title: 'リフレッシュラウンジ', area: '3Fラウンジ', effect: '快適な環境維持（+1マス）', move: 1 },
+      { id: 28, x: 39.0, y: 31.5, title: '法務コンプライアンス室前', area: '3F法務', effect: '最高裁判例を精密調査' },
+      { id: 29, x: 43.5, y: 28.5, title: '重要機密保管庫', area: '3F法務', effect: '二重ロック確認（+1マス）', move: 1 },
+      { id: 30, x: 48.0, y: 26.0, title: '高層連絡ブリッジ中央', area: '3F通路', effect: '耐震伸縮継手正常' },
+      { id: 31, x: 53.0, y: 28.5, title: '屋上直通エスカレーター', area: '3F通路', effect: '一気に上階へ（+1マス）', move: 1 },
+      { id: 32, x: 58.0, y: 32.5, title: '屋上アプローチ階段下', area: 'RF階段', effect: '最終階段を登る' },
+      { id: 33, x: 63.0, y: 31.0, title: '屋上連絡階段踊り場', area: 'RF階段', effect: '安全確認完了' },
+      { id: 34, x: 68.0, y: 28.5, title: '避難誘導灯点検', area: 'RF', effect: '視認性クリア' },
+      { id: 35, x: 73.0, y: 25.5, title: '屋上最終セキュリティ扉', area: 'RF', effect: '暗証解除成功！（+1マス）', move: 1 },
+      { id: 36, x: 81.0, y: 23.0, title: '屋上庭園 (GOAL!)', area: 'RF屋上庭園', effect: '🏆 オフィスビル全点検完遂！最優秀警備チーム！', type: 'goal' }
+    ];
+
+    // 5チームの初期ステート
+    const initialTeams = [
+      { id: 1, name: 'チーム1', colorName: '赤', color: '#ef4444', darkColor: '#991b1b', currentStep: 1, joined: false, answer: null, isCorrect: false },
+      { id: 2, name: 'チーム2', colorName: '青', color: '#3b82f6', darkColor: '#1d4ed8', currentStep: 1, joined: false, answer: null, isCorrect: false },
+      { id: 3, name: 'チーム3', colorName: '黄', color: '#eab308', darkColor: '#a16207', currentStep: 1, joined: false, answer: null, isCorrect: false },
+      { id: 4, name: 'チーム4', colorName: '緑', color: '#10b981', darkColor: '#047857', currentStep: 1, joined: false, answer: null, isCorrect: false },
+      { id: 5, name: 'チーム5', colorName: '紫', color: '#a855f7', darkColor: '#7e22ce', currentStep: 1, joined: false, answer: null, isCorrect: false }
+    ];
+
+    // グローバル共有状態
+    let gameState = {
+      currentQuizIndex: 0,
+      phase: 'WAITING', // WAITING, ANSWERING, CLOSED, REVEALED
+      teams: JSON.parse(JSON.stringify(initialTeams)),
+      correctTeamsQueue: [], // 正解チームのボタン順番
+      activeHandoverTeamId: null, // 現在ボタンを持っているチームID
+      diceMax: 3
+    };
+
+    let myTeamId = null; // スマホ側の場合のチームID (1〜5)
+    let isRolling = false;
+    let audioCtx = null;
+
+    // ==========================================
+    // ==========================================
+    function initAudio() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+    }
+
+    function playSound(type) {
+      try {
+        initAudio();
+        if (!audioCtx) return;
+        const now = audioCtx.currentTime;
+
+        if (type === 'tick') {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(540, now);
+          gain.gain.setValueAtTime(0.12, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start(now);
+          osc.stop(now + 0.04);
+        } else if (type === 'beep') {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(880, now);
+          gain.gain.setValueAtTime(0.15, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start(now);
+          osc.stop(now + 0.08);
+        } else if (type === 'correct') {
+          [523.25, 659.25, 783.99, 1046.5].forEach((freq, idx) => {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(freq, now + idx * 0.1);
+            gain.gain.setValueAtTime(0.2, now + idx * 0.1);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.1 + 0.35);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(now + idx * 0.1);
+            osc.stop(now + idx * 0.1 + 0.35);
+          });
+        } else if (type === 'thud') {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(140, now);
+          osc.frequency.exponentialRampToValueAtTime(60, now + 0.2);
+          gain.gain.setValueAtTime(0.2, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start(now);
+          osc.stop(now + 0.25);
+        }
+      } catch (e) {
+        console.warn('Audio not allowed', e);
+      }
+    }
+
+    function getGuardSvg(color, darkColor, size = 32) {
+      return `
+        <svg width="${size}" height="${size}" viewBox="0 0 64 64" fill="none">
+          <ellipse cx="32" cy="58" rx="20" ry="5.5" fill="#000000" fill-opacity="0.5" />
+          <path d="M15 60C15 46 22 40 32 40C42 40 49 46 49 60H15Z" fill="${color}" />
+          <rect x="15" y="44" width="7" height="3" rx="1.5" fill="#FACC15" />
+          <rect x="42" y="44" width="7" height="3" rx="1.5" fill="#FACC15" />
+          <polygon points="32,40 26,48 38,48" fill="#FFFFFF" />
+          <polygon points="32,42 30,55 32,58 34,55" fill="${darkColor}" />
+          <circle cx="38" cy="46" r="2.8" fill="#FACC15" />
+          <circle cx="32" cy="29" r="14" fill="#FFDFC4" />
+          <ellipse cx="23" cy="32.5" rx="2.5" ry="1.5" fill="#F87171" opacity="0.65"/>
+          <ellipse cx="41" cy="32.5" rx="2.5" ry="1.5" fill="#F87171" opacity="0.65"/>
+          <circle cx="26" cy="28.5" r="2.2" fill="#0F172A" />
+          <circle cx="38" cy="28.5" r="2.2" fill="#0F172A" />
+          <path d="M29 33.5 Q32 36.5 35 33.5" stroke="#7C2D12" stroke-width="1.6" fill="none" />
+          <path d="M18 23C18 13 24 11 32 11C40 11 46 13 46 23Z" fill="${color}" />
+          <rect x="17" y="21" width="30" height="3.8" rx="1" fill="#0F172A" />
+          <polygon points="32,15 35.5,21.5 28.5,21.5" fill="#FACC15" />
+          <ellipse cx="32" cy="23.8" rx="16" ry="3.2" fill="#020617" />
+        </svg>
+      `;
+    }
+
+    // ==========================================
+    // ==========================================
+    // 同一ブラウザの別タブ・別ウィンドウやスマホでリアルタイム同期するための通信バス
+    const syncChannel = new BroadcastChannel('sugoroku_sync_bus');
+
+    syncChannel.onmessage = (event) => {
+      const { type, payload } = event.data;
+      if (type === 'STATE_UPDATE') {
+        gameState = payload;
+        renderHostUI();
+        renderClientUI();
+      } else if (type === 'CLIENT_ANSWER') {
+        handleClientAnswer(payload.teamId, payload.answer);
+      } else if (type === 'CLIENT_JOIN') {
+        handleClientJoin(payload.teamId, payload.name);
+      }
+    };
+
+    function broadcastState() {
+      syncChannel.postMessage({ type: 'STATE_UPDATE', payload: gameState });
+      localStorage.setItem('sugoroku_game_state', JSON.stringify(gameState));
+    }
+
+    function loadSavedState() {
+      const saved = localStorage.getItem('sugoroku_game_state');
+      if (saved) {
+        try {
+          gameState = JSON.parse(saved);
+        } catch (e) {
+          console.warn('Could not parse saved state', e);
+        }
+      }
+    }
+
+    // ==========================================
+    // ==========================================
+    function renderHostUI() {
+      const currentQ = quizPreset[gameState.currentQuizIndex] || quizPreset[0];
+
+      // クイズ表示
+      document.getElementById('quizNumberBadge').innerText = `第 ${gameState.currentQuizIndex + 1} 問 / 全 ${quizPreset.length} 問`;
+      document.getElementById('quizCategoryBadge').innerText = currentQ.category;
+      document.getElementById('quizQuestionText').innerText = currentQ.question;
+
+      // 4択レンダリング
+      const choicesBox = document.getElementById('quizChoicesContainer');
+      choicesBox.innerHTML = '';
+      currentQ.choices.forEach((choiceText, idx) => {
+        const choiceNum = idx + 1;
+        const isRevealed = gameState.phase === 'REVEALED';
+        const isCorrect = isRevealed && (choiceNum === currentQ.correct);
+
+        let bgClass = 'bg-slate-800 border-slate-700 text-slate-300';
+        if (isRevealed) {
+          if (isCorrect) {
+            bgClass = 'bg-emerald-900 border-emerald-400 text-white ring-2 ring-emerald-400 font-black';
+          } else {
+            bgClass = 'bg-slate-900/60 border-slate-800 text-slate-500 opacity-60';
+          }
+        }
+
+        choicesBox.innerHTML += `
+          <div class="p-2 rounded-xl border text-xs font-bold ${bgClass} transition flex items-center justify-between">
+            <span>${choiceText}</span>
+            ${isCorrect ? '<i class="fa-solid fa-check text-emerald-400 text-sm"></i>' : ''}
+          </div>
+        `;
+      });
+
+      // 解説
+      const expBox = document.getElementById('quizExplanationBox');
+      if (gameState.phase === 'REVEALED') {
+        expBox.classList.remove('hidden');
+        expBox.innerHTML = `<div class="font-bold text-amber-300 mb-0.5"><i class="fa-solid fa-scale-balanced mr-1"></i>判例の要点：</div><div>${currentQ.explanation.replace(/\n/g, '<br>')}</div>`;
+      } else {
+        expBox.classList.add('hidden');
+      }
+
+      // クイズ進行ボタンの状態
+      const btnOpen = document.getElementById('btnOpenAnswer');
+      const btnClose = document.getElementById('btnCloseAnswer');
+      const btnReveal = document.getElementById('btnRevealAnswer');
+
+      btnOpen.className = `px-3 py-1 rounded-xl text-xs font-black shadow-md flex items-center gap-1 transition ${
+        gameState.phase === 'WAITING' ? 'bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer' : 'bg-slate-800 text-slate-500 opacity-50 cursor-not-allowed'
+      }`;
+      btnOpen.disabled = gameState.phase !== 'WAITING';
+
+      btnClose.className = `px-3 py-1 rounded-xl text-xs font-black shadow-md flex items-center gap-1 transition ${
+        gameState.phase === 'ANSWERING' ? 'bg-amber-600 hover:bg-amber-500 text-white cursor-pointer animate-pulse' : 'bg-slate-800 text-slate-500 opacity-50 cursor-not-allowed'
+      }`;
+      btnClose.disabled = gameState.phase !== 'ANSWERING';
+
+      btnReveal.className = `px-3 py-1 rounded-xl text-xs font-black shadow-md flex items-center gap-1 transition ${
+        gameState.phase === 'CLOSED' ? 'bg-indigo-600 hover:bg-indigo-500 text-white cursor-pointer ring-2 ring-amber-400' : 'bg-slate-800 text-slate-500 opacity-50 cursor-not-allowed'
+      }`;
+      btnReveal.disabled = gameState.phase !== 'CLOSED';
+
+      // チーム一覧描画
+      const teamList = document.getElementById('teamsListContainer');
+      teamList.innerHTML = '';
+      let answeredCount = 0;
+
+      gameState.teams.forEach(t => {
+        if (t.answer !== null) answeredCount++;
+
+        let statusBadge = '<span class="text-[10px] text-slate-500">未回答</span>';
+        if (t.answer !== null) {
+          if (gameState.phase === 'REVEALED') {
+            statusBadge = t.isCorrect
+              ? `<span class="text-[10px] bg-emerald-500 text-slate-950 font-black px-1.5 py-0.5 rounded-full">正解！(選択: ${t.answer})</span>`
+              : `<span class="text-[10px] bg-rose-950 text-rose-300 font-bold px-1.5 py-0.5 rounded-full">不正解(選択: ${t.answer})</span>`;
+          } else {
+            statusBadge = '<span class="text-[10px] bg-blue-900 text-blue-200 font-bold px-1.5 py-0.5 rounded-full"><i class="fa-solid fa-check mr-1"></i>回答済</span>';
+          }
+        }
+
+        const isCurrentHandover = (gameState.activeHandoverTeamId === t.id);
+
+        teamList.innerHTML += `
+          <div class="p-1.5 rounded-xl border text-xs flex items-center justify-between transition ${
+            isCurrentHandover ? 'border-amber-400 bg-amber-950/60 ring-2 ring-amber-400 shadow-md' : 'border-slate-800 bg-slate-950/80'
+          }">
+            <div class="flex items-center gap-2">
+              <div class="w-6 h-6 rounded-lg flex items-center justify-center bg-slate-800">
+                ${getGuardSvg(t.color, t.darkColor, 20)}
+              </div>
+              <div>
+                <div class="font-black text-white flex items-center gap-1">
+                  ${t.name}
+                  ${t.joined ? '<span class="w-1.5 h-1.5 rounded-full bg-emerald-400" title="接続中"></span>' : ''}
+                </div>
+                <div class="text-[10px] text-slate-400">マス #${t.currentStep}</div>
+              </div>
+            </div>
+            <div>${statusBadge}</div>
+          </div>
+        `;
+      });
+
+      document.getElementById('answeredCountLabel').innerText = `回答済 ${answeredCount}/5`;
+
+      // サイコロボタン手渡しバナー
+      updateHandoverBanner();
+      renderBoardTokens();
+    }
+
+    function updateHandoverBanner() {
+      const banner = document.getElementById('handoverBanner');
+      const text = document.getElementById('handoverText');
+      const subText = document.getElementById('handoverSubText');
+      const avatar = document.getElementById('handoverGuardAvatar');
+      const queueCount = document.getElementById('handoverQueueCount');
+
+      if (gameState.activeHandoverTeamId) {
+        const team = gameState.teams.find(t => t.id === gameState.activeHandoverTeamId);
+        banner.className = 'rounded-2xl border-2 p-3 text-white shadow-xl transition-all duration-300 bg-gradient-to-r from-amber-600 to-orange-600 border-amber-300';
+        text.innerText = `次は「${team.name}」にサイコロボタンを手渡してください！`;
+        subText.innerText = 'ボタンを受け取ったら、押してサイコロを振ってください！';
+        avatar.innerHTML = getGuardSvg(team.color, team.darkColor, 40);
+        queueCount.innerText = `残り ${gameState.correctTeamsQueue.length + 1} チーム`;
+      } else {
+        banner.className = 'rounded-2xl border-2 p-3 text-white shadow-xl transition-all duration-300 bg-slate-900 border-slate-700';
+        avatar.innerHTML = '<i class="fa-solid fa-dice text-2xl text-slate-400"></i>';
+        if (gameState.phase === 'REVEALED') {
+          text.innerText = '全正解チームのサイコロ完了！';
+          subText.innerText = '次の問題へ進んでください。';
+          queueCount.innerText = '完了';
+        } else {
+          text.innerText = '正解発表をお待ちください';
+          subText.innerText = '正解したチームに順番にボタンを手渡します';
+          queueCount.innerText = '待機中';
+        }
+      }
+    }
+
+    // クイズ操作
+    function openAnswering() {
+      gameState.phase = 'ANSWERING';
+      gameState.teams.forEach(t => t.answer = null);
+      gameState.correctTeamsQueue = [];
+      gameState.activeHandoverTeamId = null;
+      playSound('beep');
+      broadcastState();
+      renderHostUI();
+    }
+
+    function closeAnswering() {
+      gameState.phase = 'CLOSED';
+      playSound('thud');
+      broadcastState();
+      renderHostUI();
+    }
+
+    function revealAnswer() {
+      gameState.phase = 'REVEALED';
+      const currentQ = quizPreset[gameState.currentQuizIndex];
+
+      const correctTeamIds = [];
+      gameState.teams.forEach(t => {
+        t.isCorrect = (t.answer === currentQ.correct);
+        if (t.isCorrect) correctTeamIds.push(t.id);
+      });
+
+      if (correctTeamIds.length > 0) {
+        playSound('correct');
+        confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+        gameState.correctTeamsQueue = correctTeamIds;
+        advanceHandoverQueue();
+      } else {
+        playSound('thud');
+        gameState.correctTeamsQueue = [];
+        gameState.activeHandoverTeamId = null;
+      }
+
+      broadcastState();
+      renderHostUI();
+    }
+
+    function advanceHandoverQueue() {
+      if (gameState.correctTeamsQueue.length > 0) {
+        gameState.activeHandoverTeamId = gameState.correctTeamsQueue.shift();
+      } else {
+        gameState.activeHandoverTeamId = null;
+      }
+    }
+
+    function nextQuiz(delta) {
+      gameState.currentQuizIndex = Math.min(quizPreset.length - 1, Math.max(0, gameState.currentQuizIndex + delta));
+      gameState.phase = 'WAITING';
+      gameState.teams.forEach(t => { t.answer = null; t.isCorrect = false; });
+      gameState.correctTeamsQueue = [];
+      gameState.activeHandoverTeamId = null;
+      playSound('tick');
+      broadcastState();
+      renderHostUI();
+    }
+
+    // ==========================================
+    // ==========================================
+    const faceRotations = {
+      1: { x: 0,   y: 0 },
+      2: { x: 90,  y: 0 },
+      3: { x: 0,   y: -90 },
+      4: { x: 0,   y: 90 },
+      5: { x: -90, y: 0 },
+      6: { x: 0,   y: 180 }
+    };
+
+    // Bluetooth物理ボタン検知
+    window.addEventListener('keydown', (e) => {
+      if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
+
+      const validKeys = ['KeyA', 'a', 'A', 'Space', ' ', 'Enter'];
+      if (validKeys.includes(e.code) || validKeys.includes(e.key)) {
+        e.preventDefault();
+        document.body.classList.add('screen-flash');
+        setTimeout(() => document.body.classList.remove('screen-flash'), 380);
+
+        triggerDiceRoll();
+      }
+    });
+
+    function triggerDiceRoll() {
+      if (isRolling) return;
+      // 手番の正解チームがいるか確認
+      const targetTeam = gameState.teams.find(t => t.id === gameState.activeHandoverTeamId);
+      if (!targetTeam) {
+        // 現在ボタン手番チームがいない場合、任意のチーム手番として振ることも可能
+        return;
+      }
+
+      isRolling = true;
+      initAudio();
+
+      const cube = document.getElementById('cube');
+      const badge = document.getElementById('diceResultBadge');
+      badge.innerText = `${targetTeam.name} がサイコロ中...`;
+      cube.classList.add('rolling');
+
+      const tickTimer = setInterval(() => playSound('tick'), 120);
+      const targetValue = Math.floor(Math.random() * gameState.diceMax) + 1;
+
+      setTimeout(() => {
+        clearInterval(tickTimer);
+        cube.classList.remove('rolling');
+
+        const base = faceRotations[targetValue];
+        const extraSpins = 4;
+        cube.style.transform = `translateZ(calc(var(--dice-size) / -2)) rotateX(${base.x + 360 * extraSpins}deg) rotateY(${base.y + 360 * extraSpins}deg)`;
+        playSound('beep');
+
+        badge.innerHTML = `<span class="text-sm font-black text-amber-400 mr-1">${targetValue}</span> が出ました！`;
+
+        // コマを前進
+        advanceTeamSteps(targetTeam, targetValue, () => {
+          isRolling = false;
+          // 次の正解チームへ手番を渡す
+          advanceHandoverQueue();
+          broadcastState();
+          renderHostUI();
+        });
+      }, 1150);
+    }
+
+    function advanceTeamSteps(team, steps, onComplete) {
+      let remaining = steps;
+      function step() {
+        if (remaining > 0 && team.currentStep < waypoints.length) {
+          team.currentStep++;
+          remaining--;
+          playSound('tick');
+          renderBoardTokens();
+          setTimeout(step, 260);
+        } else {
+          // マス目イベント判定
+          const cell = waypoints.find(w => w.id === team.currentStep);
+          if (cell && cell.type === 'goal') {
+            confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
+            showEventModal(team, cell, '🏆 ゴール達成！屋上庭園へ到達！', `${team.name} がオフィスビルの全点検を完了しました！`);
+          } else if (cell && cell.move) {
+            setTimeout(() => {
+              team.currentStep = Math.max(1, Math.min(waypoints.length, team.currentStep + cell.move));
+              renderBoardTokens();
+              if (onComplete) onComplete();
+            }, 300);
+            return;
+          }
+          if (onComplete) onComplete();
+        }
+      }
+      step();
+    }
+
+    function renderBoardTokens() {
+      const layer = document.getElementById('guardsLayer');
+      layer.innerHTML = '';
+
+      const cellMap = {};
+      gameState.teams.forEach((t, idx) => {
+        if (!cellMap[t.currentStep]) cellMap[t.currentStep] = [];
+        cellMap[t.currentStep].push({ team: t, idx });
+      });
+
+      Object.keys(cellMap).forEach(stepStr => {
+        const step = parseInt(stepStr, 10);
+        const wp = waypoints.find(w => w.id === step) || waypoints[0];
+        const occupants = cellMap[step];
+
+        occupants.forEach((item, occIdx) => {
+          const { team } = item;
+          const isButtonHolder = (team.id === gameState.activeHandoverTeamId);
+
+          let offsetX = 0;
+          let offsetY = 0;
+          if (occupants.length > 1) {
+            const spread = 2.0;
+            const angle = (occIdx / occupants.length) * Math.PI * 2;
+            offsetX = Math.cos(angle) * spread;
+            offsetY = Math.sin(angle) * (spread * 0.55);
+          }
+
+          const token = document.createElement('div');
+          token.className = `guard-token ${isButtonHolder ? 'active-bounce' : ''}`;
+          token.style.left = `${wp.x + offsetX}%`;
+          token.style.top = `${wp.y + offsetY}%`;
+          token.style.zIndex = isButtonHolder ? 45 : (20 + occIdx);
+          token.innerHTML = getGuardSvg(team.color, team.darkColor, isButtonHolder ? 36 : 28);
+          layer.appendChild(token);
+        });
+      });
+    }
+
+    // ==========================================
+    // ==========================================
+    function initClientSelectGrid() {
+      const grid = document.getElementById('teamColorSelectGrid');
+      grid.innerHTML = '';
+      gameState.teams.forEach(t => {
+        grid.innerHTML += `
+          <button onclick="selectClientColorSlot(${t.id})" id="colorSlotBtn${t.id}" class="py-2.5 rounded-xl flex flex-col items-center justify-center border-2 border-slate-700 bg-slate-900 transition active:scale-95">
+            <span class="w-4 h-4 rounded-full mb-1" style="background:${t.color}"></span>
+            <span class="text-[10px] font-bold text-slate-300">${t.colorName}</span>
+          </button>
+        `;
+      });
+    }
+
+    function selectClientColorSlot(id) {
+      myTeamId = id;
+      gameState.teams.forEach(t => {
+        const btn = document.getElementById(`colorSlotBtn${t.id}`);
+        if (btn) {
+          if (t.id === id) {
+            btn.className = 'py-2.5 rounded-xl flex flex-col items-center justify-center border-2 border-amber-400 bg-amber-950/60 transition scale-105';
+          } else {
+            btn.className = 'py-2.5 rounded-xl flex flex-col items-center justify-center border-2 border-slate-700 bg-slate-900 transition';
+          }
+        }
+      });
+    }
+
+    function joinGameAsTeam() {
+      if (!myTeamId) {
+        myTeamId = 1; // デフォルトチーム1
+      }
+      const customName = document.getElementById('clientTeamNameInput').value.trim();
+      const team = gameState.teams.find(t => t.id === myTeamId);
+      if (customName) team.name = customName;
+      team.joined = true;
+
+      syncChannel.postMessage({ type: 'CLIENT_JOIN', payload: { teamId: myTeamId, name: team.name } });
+      broadcastState();
+
+      document.getElementById('clientJoinStep').classList.add('hidden');
+      document.getElementById('clientPlayStep').classList.remove('hidden');
+      renderClientUI();
+    }
+
+    function handleClientJoin(teamId, name) {
+      const team = gameState.teams.find(t => t.id === teamId);
+      if (team) {
+        team.joined = true;
+        if (name) team.name = name;
+        renderHostUI();
+      }
+    }
+
+    function renderClientUI() {
+      if (!myTeamId) return;
+      const team = gameState.teams.find(t => t.id === myTeamId);
+      if (!team) return;
+
+      document.getElementById('clientTeamBadge').style.backgroundColor = team.color;
+      document.getElementById('clientTeamBadge').innerText = team.id;
+      document.getElementById('clientTeamNameDisplay').innerText = team.name;
+      document.getElementById('clientQuizNumDisplay').innerText = `第 ${gameState.currentQuizIndex + 1} 問`;
+
+      const statusMain = document.getElementById('clientStatusMain');
+      const statusSub = document.getElementById('clientStatusSub');
+      const buttonsGrid = document.getElementById('clientChoiceButtonsGrid');
+
+      const isAnswering = (gameState.phase === 'ANSWERING');
+      const isClosed = (gameState.phase === 'CLOSED');
+      const isRevealed = (gameState.phase === 'REVEALED');
+
+      // 4択ボタンの有効/無効化
+      [1, 2, 3, 4].forEach(num => {
+        const btn = document.getElementById(`btnChoice${num}`);
+        if (!btn) return;
+        if (isAnswering && team.answer === null) {
+          btn.disabled = false;
+          btn.classList.remove('opacity-40', 'cursor-not-allowed');
+        } else {
+          btn.disabled = true;
+          btn.classList.add('opacity-40', 'cursor-not-allowed');
+        }
+
+        // 自分が選んだボタンのハイライト
+        if (team.answer === num) {
+          btn.classList.add('ring-4', 'ring-white');
+        } else {
+          btn.classList.remove('ring-4', 'ring-white');
+        }
+      });
+
+      // 状態メッセージの切り替え
+      if (gameState.phase === 'WAITING') {
+        statusSub.innerText = 'スクリーンをご覧ください';
+        statusMain.innerText = '出題を待っています...';
+        statusMain.className = 'text-base font-black text-slate-300';
+      } else if (isAnswering) {
+        if (team.answer === null) {
+          statusSub.innerText = 'スクリーンを見て選んでください';
+          statusMain.innerText = 'ボタンをタップして回答！';
+          statusMain.className = 'text-lg font-black text-amber-400 animate-pulse';
+        } else {
+          statusSub.innerText = `選択：${team.answer} を送信しました`;
+          statusMain.innerText = '回答送信完了！結果待ち';
+          statusMain.className = 'text-base font-black text-blue-400';
+        }
+      } else if (isClosed) {
+        statusSub.innerText = '回答受付が終了しました';
+        statusMain.innerText = '正解発表をお待ちください...';
+        statusMain.className = 'text-base font-black text-amber-300';
+      } else if (isRevealed) {
+        if (team.isCorrect) {
+          const isHoldingButton = (gameState.activeHandoverTeamId === team.id);
+          statusSub.innerText = 'お見事！正解です！🎉';
+          statusMain.innerText = isHoldingButton ? '🎲 サイコロボタンを受け取って振ってください！' : '正解！サイコロの順番を待っています';
+          statusMain.className = 'text-base font-black text-emerald-400 animate-bounce';
+        } else {
+          statusSub.innerText = '残念...今回は不正解でした';
+          statusMain.innerText = '次の問題で挽回しましょう！';
+          statusMain.className = 'text-base font-black text-rose-400';
+        }
+      }
+    }
+
+    function submitClientChoice(num) {
+      if (!myTeamId || gameState.phase !== 'ANSWERING') return;
+      const team = gameState.teams.find(t => t.id === myTeamId);
+      if (team.answer !== null) return; // 既に回答済
+
+      team.answer = num;
+      playSound('beep');
+
+      syncChannel.postMessage({ type: 'CLIENT_ANSWER', payload: { teamId: myTeamId, answer: num } });
+      broadcastState();
+      renderClientUI();
+    }
+
+    function handleClientAnswer(teamId, answer) {
+      const team = gameState.teams.find(t => t.id === teamId);
+      if (team) {
+        team.answer = answer;
+        renderHostUI();
+      }
+    }
+
+    // ==========================================
+    // ==========================================
+    function openQrModal() {
+      const modal = document.getElementById('qrModal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+
+      const qrContainer = document.getElementById('qrcode');
+      qrContainer.innerHTML = '';
+
+      // 現在のURL（子機モード用パラメータ付与）
+      const currentUrl = new URL(window.location.href);
+      currentUrl.searchParams.set('mode', 'client');
+      const joinUrl = currentUrl.toString();
+
+      document.getElementById('joinUrlDisplay').innerText = joinUrl;
+
+      new QRCode(qrContainer, {
+        text: joinUrl,
+        width: 180,
+        height: 180,
+        colorDark: '#0f172a',
+        colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.M
+      });
+    }
+
+    function closeQrModal() {
+      document.getElementById('qrModal').classList.add('hidden');
+      document.getElementById('qrModal').classList.remove('flex');
+    }
+
+    function showEventModal(team, cell, title, desc) {
+      const modal = document.getElementById('eventModal');
+      document.getElementById('modalTeamBadge').innerText = team.name;
+      document.getElementById('modalTeamBadge').style.backgroundColor = team.color;
+      document.getElementById('modalGuardAvatar').innerHTML = getGuardSvg(team.color, team.darkColor, 44);
+      document.getElementById('modalTitle').innerText = title;
+      document.getElementById('modalDesc').innerText = desc;
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeEventModal() {
+      document.getElementById('eventModal').classList.add('hidden');
+      document.getElementById('eventModal').classList.remove('flex');
+    }
+
+    function toggleFullscreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(err => console.warn(err));
+      } else {
+        if (document.exitFullscreen) document.exitFullscreen();
+      }
+    }
+
+    function switchView(mode) {
+      if (mode === 'client') {
+        document.getElementById('hostApp').classList.add('hidden');
+        document.getElementById('clientApp').classList.remove('hidden');
+        initClientSelectGrid();
+        renderClientUI();
+      } else {
+        document.getElementById('clientApp').classList.add('hidden');
+        document.getElementById('hostApp').classList.remove('hidden');
+        renderHostUI();
+      }
+    }
+
+    // ==========================================
+    // ==========================================
+    window.onload = () => {
+      loadSavedState();
+
+      // URLパラメータの判別 (?mode=client ならスマホ回答画面を初期表示)
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('mode') === 'client') {
+        switchView('client');
+      } else {
+        switchView('host');
+      }
+    };
+  </script>
+</body>
+</html>
